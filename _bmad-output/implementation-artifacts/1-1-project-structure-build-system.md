@@ -1,6 +1,6 @@
 # Story 1.1: Project Structure & Build System
 
-Status: review
+Status: done
 
 ## Story
 
@@ -279,17 +279,20 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 | Date | Task | Status | Notes |
 |------|------|--------|-------|
 | 2026-01-14 | Story 1.1 | Complete | Initial project structure and build system |
+| 2026-01-14 | Code Review | Complete | Removed unused NASM vars from config.mk, added test binary exclusion to .gitignore |
 
 ### File List
 
 **New Files:**
-- .gitignore
-- config.mk
 - Makefile
+- config.mk
 - scripts/kernel.ld
 - kernel/include/types.h
 - kernel/init/main.c
 - boot/stage1.S
+
+**Modified Files:**
+- .gitignore (added test binary exclusion pattern)
 
 **New Directories:**
 - boot/

@@ -5,6 +5,10 @@ build/
 *.img
 *.elf
 
+# Test binaries (host-side)
+tests/test_*
+!tests/test_*.c
+
 # Editor files
 *.swp
 *.swo
