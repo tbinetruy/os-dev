@@ -16,11 +16,13 @@ include $(ROOT)/config.mk
 KERNEL_SRCS := $(wildcard kernel/init/*.c)
 KERNEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_SRCS))
 
-BOOT_SRC := boot/stage1.S
+STAGE1_SRC := boot/stage1.S
+STAGE2_SRC := boot/stage2.S
 
 # Output files
 KERNEL_BIN := $(BUILD)/kernel.bin
-STAGE1_BIN := $(BUILD)/stage1.bin
+STAGE1_BIN := $(BUILD)/boot/stage1.bin
+STAGE2_BIN := $(BUILD)/boot/stage2.bin
 DISK_IMG := $(BUILD)/os-dev.img
 
 # Image parameters
@@ -48,15 +50,32 @@ $(KERNEL_BIN): $(KERNEL_OBJS)
 	$(OBJCOPY) -O binary $(BUILD)/kernel.elf $@
 
 # Assemble stage1 bootloader
-$(STAGE1_BIN): $(BOOT_SRC)
-	$(CC) -m16 -c -o $(BUILD)/stage1.o $<
-	$(LD) --oformat binary -e _start -Ttext 0x7C00 -o $@ $(BUILD)/stage1.o
+# CRITICAL: stage1.bin MUST be exactly 512 bytes (MBR size)
+$(STAGE1_BIN): $(STAGE1_SRC)
+	$(CC) -m16 -c -o $(BUILD)/boot/stage1.o $<
+	$(LD) --oformat binary -e _start -Ttext 0x7C00 -o $@ $(BUILD)/boot/stage1.o
+	@SIZE=$$(stat -c%s $@); \
+	if [ "$$SIZE" -ne 512 ]; then \
+		echo "ERROR: stage1.bin is $$SIZE bytes, must be exactly 512"; \
+		rm -f $@; \
+		exit 1; \
+	fi
+
+# Assemble stage2 bootloader
+$(STAGE2_BIN): $(STAGE2_SRC)
+	$(CC) -m16 -c -o $(BUILD)/boot/stage2.o $<
+	$(LD) --oformat binary -e _start -Ttext 0x7E00 -o $@ $(BUILD)/boot/stage2.o
 
 # Create disk image
-$(DISK_IMG): $(STAGE1_BIN) $(KERNEL_BIN)
+# Layout:
+#   Sector 0 (512 bytes): Stage 1 (MBR)
+#   Sectors 1-4 (2KB): Stage 2
+#   Sectors 5+: Kernel (loaded by stage 2 in Story 1.3)
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN)
 	@echo "Creating disk image..."
 	dd if=/dev/zero of=$@ bs=1K count=$(DISK_SIZE) 2>/dev/null
 	dd if=$(STAGE1_BIN) of=$@ conv=notrunc 2>/dev/null
+	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	@echo "Disk image created: $@"
 
 # Run in QEMU

@@ -2,238 +2,268 @@
  * stage1.S - Stage 1 Bootloader (Master Boot Record)
  *
  * =============================================================================
- * WHAT HAPPENS WHEN YOU TURN ON A PC?
+ * STAGE 1 BOOTLOADER - MBR (Story 1.2)
  * =============================================================================
  *
- * 1. CPU starts executing BIOS code (firmware burned into ROM chip)
+ * This is the first code that runs after BIOS loads us at 0x7C00.
+ * It must fit in exactly 512 bytes with boot signature 0xAA55 at offset 510.
  *
- * 2. BIOS performs POST (Power-On Self Test):
- *    - Checks RAM is working
- *    - Detects connected devices (keyboard, disk drives, etc.)
- *    - Initializes hardware to a known state
+ * What this bootloader does:
+ *   1. Sets up segment registers (DS, ES, SS = 0)
+ *   2. Sets up stack below 0x7C00
+ *   3. Saves boot drive number from DL
+ *   4. Prints 'S' to show stage 1 is running
+ *   5. Loads stage 2 from disk sectors 2-5 to 0x7E00
+ *   6. Jumps to stage 2, passing boot drive in DL
  *
- * 3. BIOS looks for a "bootable" disk:
- *    - Reads the FIRST sector (512 bytes) from each disk
- *    - Checks if bytes 510-511 contain the "boot signature" (0x55, 0xAA)
- *    - First disk with valid signature is the boot disk
- *
- * 4. BIOS loads that 512-byte sector into RAM at address 0x7C00
- *
- * 5. BIOS jumps to address 0x7C00, and YOUR CODE starts running!
- *
- * This first 512-byte sector is called the "Master Boot Record" (MBR).
- * That's what this file creates.
- *
- * =============================================================================
- * WHY 0x7C00?
- * =============================================================================
- *
- * This magic address comes from the original IBM PC design in 1981.
- *
- * The IBM PC had 32KB of RAM minimum. The designers needed a place to load
- * the boot sector that:
- *   - Was above the interrupt vector table (0x0000-0x03FF)
- *   - Was above the BIOS data area (0x0400-0x04FF)
- *   - Left room for the boot sector to use as stack/data
- *   - Left room for the loaded OS
- *
- * They chose 0x7C00, which is 1KB below the 32KB boundary (0x8000).
- * This gave 512 bytes for the boot sector + 512 bytes for its stack.
- *
- * Modern PCs have gigabytes of RAM, but still load the boot sector at
- * 0x7C00 for backwards compatibility.
- *
- * =============================================================================
- * REAL MODE: THE CPU'S PRIMITIVE STATE
- * =============================================================================
- *
- * When the CPU starts, it's in "Real Mode" - a compatibility mode that
- * emulates the original 8086 processor from 1978. This means:
- *
- * - 16-bit registers (AX, BX, CX, DX, etc.)
- * - 20-bit address space (1MB maximum addressable memory)
- * - No memory protection (any code can access any memory)
- * - No multitasking support
- * - Direct hardware access (no permission levels)
- *
- * Memory addressing in Real Mode uses SEGMENT:OFFSET pairs:
- *   Physical Address = (Segment * 16) + Offset
- *
- * For example, 0x07C0:0x0000 and 0x0000:0x7C00 both point to physical
- * address 0x7C00. This segmentation model is confusing and limiting,
- * which is why we switch to Protected Mode as soon as possible.
- *
- * =============================================================================
- * THE BOOT SIGNATURE: 0xAA55
- * =============================================================================
- *
- * The last two bytes of the MBR MUST be 0x55 at offset 510 and 0xAA at
- * offset 511. This is the "boot signature" that tells BIOS this sector
- * is bootable.
- *
- * Why 0x55AA? In binary: 01010101 10101010
- * This alternating bit pattern was chosen because:
- *   - It's unlikely to appear by accident in random data
- *   - It tests that all data lines are working correctly
- *
- * Note: x86 is little-endian, so when we write ".word 0xAA55", it stores
- * 0x55 at the lower address (510) and 0xAA at the higher address (511).
- *
- * =============================================================================
- * WHAT THIS PLACEHOLDER DOES
- * =============================================================================
- *
- * This is a minimal MBR for Story 1.1. It just:
- *   1. Disables interrupts (cli)
- *   2. Halts the CPU (hlt)
- *   3. Loops forever if somehow resumed
- *
- * In Story 1.2, we'll expand this to:
- *   - Set up segment registers
- *   - Set up a stack
- *   - Load stage 2 bootloader from disk
- *   - Jump to stage 2
- *
- * =============================================================================
- * WHY MULTIPLE BOOT STAGES?
- * =============================================================================
- *
- * 512 bytes is TINY. That's not enough to:
- *   - Read files from a filesystem
- *   - Switch to Protected Mode
- *   - Load a kernel
- *   - Set up paging
- *
- * So we use a multi-stage boot process:
- *
- *   Stage 1 (this file, 512 bytes):
- *     - Fits in MBR
- *     - Loads stage 2 from known disk sectors
- *     - Jumps to stage 2
- *
- *   Stage 2 (several KB, loaded by stage 1):
- *     - Switches to Protected Mode (32-bit)
- *     - Sets up GDT (Global Descriptor Table)
- *     - Enables A20 line (access memory above 1MB)
- *     - Loads kernel from disk
- *     - Sets up initial page tables
- *     - Jumps to kernel
- *
- *   Kernel (loaded by stage 2):
- *     - Full operating system
- *     - Sets up interrupts, memory management, etc.
- *
- * =============================================================================
- * GNU ASSEMBLER (GAS) SYNTAX NOTES
- * =============================================================================
- *
- * This file uses AT&T/GAS syntax (not Intel/NASM). Key differences:
- *
- *   AT&T (GAS):                Intel (NASM):
- *   movl %eax, %ebx           mov ebx, eax       ; source, dest reversed
- *   movl $42, %eax            mov eax, 42        ; $ prefix for immediates
- *   movl (%ebx), %eax         mov eax, [ebx]     ; () vs [] for memory
- *
- * Directives:
- *   .code16       - Generate 16-bit code (Real Mode)
- *   .section .text - Put following code in .text section
- *   .global _start - Export _start symbol (linker can see it)
- *   .org 510      - Set location counter to offset 510
- *   .word 0xAA55  - Emit a 16-bit word (2 bytes)
+ * Memory layout during stage 1:
+ *   0x00000 - 0x003FF : Interrupt Vector Table (IVT)
+ *   0x00400 - 0x004FF : BIOS Data Area (BDA)
+ *   0x00500 - 0x07BFF : Free (stack grows down from 0x7C00)
+ *   0x07C00 - 0x07DFF : Stage 1 bootloader (this code, 512 bytes)
+ *   0x07E00 - 0x087FF : Stage 2 bootloader (loaded here, 2KB)
  *
  * =============================================================================
  */
 
-/*
- * .code16
- *
- * Tell the assembler to generate 16-bit code. The CPU is in Real Mode
- * when the BIOS jumps to us, so we need 16-bit instructions.
- *
- * Without this, the assembler would generate 32-bit code, which would
- * crash immediately because the CPU would misinterpret the opcodes.
- */
 .code16
-
-/*
- * .section .text
- *
- * Put the following code in the .text section (executable code).
- * The linker will use this when creating the final binary.
- */
 .section .text
-
-/*
- * .global _start
- *
- * Export the _start symbol so the linker can find it.
- * The linker needs to know where execution begins.
- */
 .global _start
 
 /*
- * _start:
- *
- * This is where the BIOS jumps after loading us to 0x7C00.
- * This is the very first instruction our OS ever executes!
+ * =============================================================================
+ * Entry Point
+ * =============================================================================
+ * BIOS jumps here after loading us to 0x7C00.
+ * DL register contains the boot drive number - MUST save immediately!
  */
 _start:
     /*
-     * cli - Clear Interrupt Flag
+     * cli - Disable interrupts during setup
      *
-     * Disables hardware interrupts. While we're setting up (segment
-     * registers, stack, etc.), we don't want interrupts firing and
-     * potentially using invalid stack or segments.
-     *
-     * We'll re-enable interrupts (sti) after everything is set up.
-     * For this placeholder, we just halt, so it doesn't matter.
+     * We disable interrupts while setting up segment registers and stack
+     * to prevent an interrupt from firing with invalid stack or segments.
      */
     cli
 
     /*
-     * hlt - Halt
+     * cld - Clear direction flag
      *
-     * Stops the CPU until the next interrupt. Since we disabled
-     * interrupts above, this effectively stops the CPU forever.
-     *
-     * This is a placeholder. In Story 1.2, we'll replace this with
-     * actual bootloader code that loads stage 2.
+     * Ensure string operations go forward (increment). Most BIOSes leave
+     * DF=0 but it's not guaranteed, so we clear it explicitly.
      */
-    hlt
+    cld
 
     /*
-     * jmp _start
+     * Save boot drive number FIRST
      *
-     * Infinite loop. If the CPU somehow resumes after hlt (which
-     * shouldn't happen with interrupts disabled), jump back and halt again.
+     * BIOS passes the boot drive in DL:
+     *   0x00 = First floppy (A:)
+     *   0x80 = First hard disk
      *
-     * In real bootloader code, this loop would never be reached.
+     * We MUST save this immediately before any code clobbers DL.
+     * We use absolute addressing with segment 0 since we haven't
+     * set up DS yet, but it will be 0 anyway on most BIOSes.
      */
-    jmp _start
+    movb %dl, boot_drive
+
+    /*
+     * Set up segment registers
+     *
+     * Real mode uses segment:offset addressing where:
+     *   Physical Address = (Segment * 16) + Offset
+     *
+     * We set all data segments to 0 so that offsets equal physical addresses.
+     * This simplifies our code - when we reference 'boot_drive', the
+     * assembler generates an offset, and with DS=0, that offset IS the
+     * physical address.
+     */
+    xorw %ax, %ax       /* AX = 0 */
+    movw %ax, %ds       /* Data Segment = 0 */
+    movw %ax, %es       /* Extra Segment = 0 (needed for int 0x13) */
+    movw %ax, %ss       /* Stack Segment = 0 */
+
+    /*
+     * Set up stack
+     *
+     * The stack grows DOWN in x86. We place the stack pointer at 0x7C00,
+     * just below where our bootloader code sits. This gives us ~29KB of
+     * stack space (from 0x7C00 down to 0x0500).
+     *
+     * IMPORTANT: Set SP AFTER SS to avoid issues with interrupts.
+     */
+    movw $0x7C00, %sp   /* Stack Pointer = 0x7C00, grows down */
+
+    /*
+     * Re-enable interrupts
+     *
+     * Segments and stack are now set up correctly. We need interrupts
+     * enabled for BIOS calls (int 0x10 for video, int 0x13 for disk).
+     */
+    sti
+
+    /*
+     * =============================================================================
+     * Print 'S' to indicate Stage 1 is running
+     * =============================================================================
+     */
+    movb $'S', %al
+    call print_char
+
+    /*
+     * =============================================================================
+     * Load Stage 2 from disk
+     * =============================================================================
+     */
+    call load_stage2
+
+    /*
+     * =============================================================================
+     * Jump to Stage 2
+     * =============================================================================
+     * Pass boot drive number in DL so stage 2 can load the kernel.
+     * Use far jump (ljmp) to ensure CS is set correctly.
+     */
+    movb boot_drive, %dl    /* Pass boot drive to stage 2 */
+    ljmp $0x0000, $0x7E00   /* Far jump to stage 2 at 0x0000:0x7E00 */
+
 
 /*
- * .org 510
+ * =============================================================================
+ * print_char - Print a character using BIOS
+ * =============================================================================
+ * Input:
+ *   AL = character to print
+ * Output:
+ *   None
+ * Clobbers:
+ *   AH, BH
  *
- * Set the location counter to offset 510 (bytes from start of section).
- * The assembler will automatically pad with zeros to reach this offset.
+ * Uses BIOS INT 0x10, AH=0x0E (Teletype Output):
+ *   AH = 0x0E   (function number)
+ *   AL = char   (character to print)
+ *   BH = page   (display page, usually 0)
+ */
+print_char:
+    movb $0x0E, %ah     /* BIOS teletype function */
+    xorb %bh, %bh       /* Page 0 */
+    int $0x10           /* Call BIOS video interrupt */
+    ret
+
+
+/*
+ * =============================================================================
+ * load_stage2 - Load stage 2 bootloader from disk
+ * =============================================================================
+ * Input:
+ *   None (uses boot_drive global)
+ * Output:
+ *   On success: returns normally
+ *   On error: jumps to error handler, does not return
+ * Clobbers:
+ *   AX, BX, CX, DX, SI
  *
- * This ensures the boot signature lands at exactly bytes 510-511 of
- * the 512-byte boot sector, which is where BIOS expects to find it.
+ * Uses BIOS INT 0x13, AH=0x02 (Read Sectors):
+ *   AH = 0x02         (function number)
+ *   AL = num_sectors  (number of sectors to read)
+ *   CH = cylinder     (cylinder number, 0-based)
+ *   CL = sector       (sector number, 1-based)
+ *   DH = head         (head number, 0-based)
+ *   DL = drive        (drive number)
+ *   ES:BX = buffer    (destination address)
  *
- * Without this, if our code was only 5 bytes, the signature would be
- * at offset 5, and BIOS wouldn't recognize this as a bootable disk.
+ * CHS addressing:
+ *   Sector 1 = MBR (stage 1, already loaded by BIOS)
+ *   Sectors 2-5 = Stage 2 (4 sectors = 2KB)
+ *
+ * IMPORTANT: CHS sector numbering is 1-based, not 0-based!
+ *
+ * Includes retry logic (3 attempts) and disk reset on failure.
+ */
+load_stage2:
+    movw $DISK_RETRIES, %si     /* SI = retry counter */
+    movb boot_drive, %dl        /* DL = drive number (preserved across INT 0x13) */
+
+.Lretry_read:
+    /* Reset disk system (AH=0x00) - helps recover from errors */
+    xorb %ah, %ah
+    int $0x13
+
+    /* Ensure ES = 0 for correct buffer address */
+    xorw %ax, %ax
+    movw %ax, %es
+
+    /* Set up read parameters */
+    movb $0x02, %ah             /* BIOS read sectors function */
+    movb $STAGE2_SECTORS, %al   /* Number of sectors to read */
+    movb $0, %ch                /* Cylinder 0 */
+    movb $2, %cl                /* Start at sector 2 (after MBR) */
+    movb $0, %dh                /* Head 0 */
+    movw $0x7E00, %bx           /* Load to ES:BX = 0x0000:0x7E00 */
+    int $0x13                   /* Call BIOS disk interrupt */
+    jc .Lread_failed            /* Jump if carry flag set (error) */
+
+    /* Verify correct number of sectors were read */
+    cmpb $STAGE2_SECTORS, %al
+    jne .Lread_failed           /* Wrong count = failure */
+    ret                         /* Success! */
+
+.Lread_failed:
+    decw %si                    /* Decrement retry counter */
+    jnz .Lretry_read            /* Retry if counter > 0 */
+    jmp error                   /* All retries exhausted */
+
+
+/*
+ * =============================================================================
+ * error - Error handler
+ * =============================================================================
+ * Called when disk read fails. Prints 'E' and halts.
+ * This function never returns.
+ */
+error:
+    movb $'E', %al      /* Print 'E' for Error */
+    call print_char
+.Lhalt:
+    cli                 /* Disable interrupts */
+    hlt                 /* Halt CPU */
+    jmp .Lhalt          /* Loop if NMI or SMI resumes execution */
+
+
+/*
+ * =============================================================================
+ * Data Section
+ * =============================================================================
+ */
+
+/* Boot drive number, saved from DL at startup */
+boot_drive:
+    .byte 0
+
+/*
+ * =============================================================================
+ * Constants
+ * =============================================================================
+ */
+
+/* Number of sectors to load for stage 2 (4 sectors = 2KB) */
+.equ STAGE2_SECTORS, 4
+
+/* Number of disk read retry attempts before giving up */
+.equ DISK_RETRIES, 3
+
+
+/*
+ * =============================================================================
+ * Boot Signature
+ * =============================================================================
+ * The MBR MUST be exactly 512 bytes with the boot signature 0xAA55
+ * at bytes 510-511. The .org directive pads with zeros to reach
+ * offset 510, then we emit the signature.
+ *
+ * x86 is little-endian, so .word 0xAA55 stores:
+ *   Byte 510: 0x55
+ *   Byte 511: 0xAA
  */
 .org 510
-
-/*
- * .word 0xAA55
- *
- * Emit the boot signature. This 16-bit word is stored in little-endian:
- *   Offset 510: 0x55
- *   Offset 511: 0xAA
- *
- * The BIOS reads these two bytes to verify this is a bootable sector.
- * Without this signature, the BIOS will reject this disk and try the
- * next one (or display "No bootable device found").
- */
 .word 0xAA55
