@@ -2,167 +2,126 @@
  * kernel.ld - Linker Script for os-dev Kernel
  *
  * =============================================================================
- * WHAT IS A LINKER SCRIPT?
+ * KERNEL LINKER SCRIPT (Story 1.3)
  * =============================================================================
  *
- * When you compile C code, the compiler produces "object files" (.o files).
- * Each object file contains machine code organized into "sections":
+ * This script tells the linker how to arrange kernel sections in memory.
  *
- *   .text   - Executable code (your functions)
- *   .rodata - Read-only data (string literals, const arrays)
- *   .data   - Initialized global/static variables
- *   .bss    - Uninitialized global/static variables (zero-filled at runtime)
+ * IMPORTANT: For Story 1.3, we run at PHYSICAL address 0x100000 (1MB).
+ * Paging is NOT enabled yet - that comes in Story 3.2.
  *
- * The LINKER combines all object files into a single executable. But it needs
- * to know WHERE in memory to place each section. That's what this script does.
+ * In Story 3.2, this will change to support the higher-half kernel:
+ *   - Virtual address: 0xC0100000 (3GB + 1MB)
+ *   - Physical address: 0x100000 (1MB)
+ *   - Paging maps virtual -> physical
  *
- * For a normal program, the OS loader handles this. But we ARE the OS, so we
- * must tell the linker exactly where our kernel will live in memory.
+ * For now, virtual == physical == 0x100000.
  *
  * =============================================================================
- * MEMORY LAYOUT BACKGROUND
+ * MEMORY LAYOUT
  * =============================================================================
  *
- * x86 PCs have a legacy memory map from the 1980s IBM PC:
+ * x86 PC memory map (simplified):
  *
- *   0x00000000 - 0x000003FF : Interrupt Vector Table (IVT) - BIOS uses this
- *   0x00000400 - 0x000004FF : BIOS Data Area (BDA)
- *   0x00000500 - 0x00007BFF : Free conventional memory
- *   0x00007C00 - 0x00007DFF : Boot sector loaded here by BIOS
- *   0x00007E00 - 0x0009FFFF : Free conventional memory (~600KB)
- *   0x000A0000 - 0x000BFFFF : Video memory (VGA framebuffer)
+ *   0x00000000 - 0x000003FF : Interrupt Vector Table (IVT)
+ *   0x00000400 - 0x000004FF : BIOS Data Area
+ *   0x00000500 - 0x00007BFF : Free / Boot data (memory map stored here)
+ *   0x00007C00 - 0x00007DFF : Stage 1 bootloader (MBR)
+ *   0x00007E00 - 0x000087FF : Stage 2 bootloader
+ *   0x00010000 - 0x0008FFFF : Kernel temporary load location
+ *   0x00090000 - 0x0009FFFF : Stack (protected mode)
+ *   0x000A0000 - 0x000BFFFF : Video memory (VGA)
  *   0x000C0000 - 0x000FFFFF : ROM area (BIOS, option ROMs)
- *   0x00100000 - onwards    : Extended memory (FREE for kernel!)
+ *   0x00100000 - onwards    : Extended memory - KERNEL LIVES HERE
  *
- * The first 1MB (0x00000000 - 0x000FFFFF) is called "conventional memory"
- * and is cluttered with legacy stuff. We load our kernel at 0x100000 (1MB)
- * to avoid all that mess.
- *
- * =============================================================================
- * HIGHER-HALF KERNEL DESIGN
- * =============================================================================
- *
- * We use a "higher-half kernel" design. This means:
- *
- *   Physical address: Where the kernel actually sits in RAM (0x100000 = 1MB)
- *   Virtual address:  Where the kernel THINKS it is (0xC0100000 = 3GB + 1MB)
- *
- * Why do this? When we enable paging (virtual memory), we want:
- *
- *   - Kernel space: 0xC0000000 - 0xFFFFFFFF (upper 1GB)
- *   - User space:   0x00000000 - 0xBFFFFFFF (lower 3GB)
- *
- * This gives each user process a clean 3GB address space starting at 0,
- * while the kernel is always mapped at the same high addresses. Every
- * process shares the same kernel mapping, making syscalls fast.
- *
- * The bootloader sets up initial page tables that map:
- *   Virtual 0xC0100000 -> Physical 0x100000
- *
- * So when the kernel code references address 0xC0100000, the CPU's MMU
- * (Memory Management Unit) translates it to physical address 0x100000.
+ * We load the kernel at 0x100000 (1MB) to avoid all the legacy clutter
+ * in the first 1MB of memory.
  *
  * =============================================================================
  * SECTION ALIGNMENT
  * =============================================================================
  *
- * We align each section to 4KB (0x1000 bytes) boundaries. Why?
- *
- * x86 paging works in 4KB "pages". Each page can have different permissions:
- *   - .text:   Execute + Read (code runs here)
- *   - .rodata: Read only (constants, can't be modified)
- *   - .data:   Read + Write (variables)
- *   - .bss:    Read + Write (uninitialized variables)
- *
- * If sections aren't page-aligned, we can't set different permissions for
- * each section. Aligning to page boundaries enables proper memory protection.
+ * Sections are aligned to 4KB (0x1000) page boundaries. This enables:
+ *   - Different memory protection per section (when paging is enabled)
+ *   - .text:   Execute + Read
+ *   - .rodata: Read only
+ *   - .data:   Read + Write
+ *   - .bss:    Read + Write
  *
  * =============================================================================
  * EXPORTED SYMBOLS
  * =============================================================================
  *
- * We export symbols like _kernel_start, _kernel_end, _bss_start, _bss_end.
- * These become global variables that C code can reference:
+ * The linker exports symbols that C code can reference:
+ *   extern char _kernel_start;  - Start of kernel image
+ *   extern char _kernel_end;    - End of kernel image
+ *   extern char _bss_start;     - Start of BSS section
+ *   extern char _bss_end;       - End of BSS section
  *
- *   extern char _kernel_start;  // Address of kernel start
- *   extern char _kernel_end;    // Address of kernel end
- *   extern char _bss_start;     // BSS section start
- *   extern char _bss_end;       // BSS section end
- *
- * The kernel uses these to:
- *   - Know how much memory the kernel occupies (for memory manager)
- *   - Zero out the BSS section at startup (C expects uninitialized globals = 0)
- *   - Set up page tables with correct permissions
+ * These are used by:
+ *   - entry.S: Zero BSS section at startup
+ *   - Memory manager: Know kernel memory footprint
+ *   - Paging: Set correct permissions
  *
  * =============================================================================
  */
 
 /*
- * ENTRY(kmain)
+ * ENTRY(_start)
  *
- * Tells the linker that 'kmain' is the entry point. When the bootloader
- * jumps to the kernel, it jumps to this symbol's address.
+ * The entry point is _start (in entry.S), which sets up the C runtime
+ * and then calls kmain().
  *
- * Note: The bootloader must know this address. It either:
- *   a) Reads it from the ELF header (if loading ELF format)
- *   b) Jumps to a known fixed address (if loading raw binary)
- *
- * Our bootloader will use approach (a) in later stories.
+ * The bootloader jumps to 0x100000, so _start must be at that address.
+ * We ensure this by placing .text.boot first in the .text section.
  */
-ENTRY(kmain)
+ENTRY(_start)
 
 SECTIONS
 {
     /*
-     * . = 0xC0100000
+     * . = 0x100000
      *
-     * The '.' is the "location counter" - it tracks the current address
-     * as we lay out sections. Setting it to 0xC0100000 means:
+     * Set the location counter to 1MB. This is where the kernel
+     * is loaded by the bootloader and where it will execute.
      *
-     * "Start placing sections at virtual address 0xC0100000"
-     *
-     * This is 3GB + 1MB, leaving the lower 3GB for user programs.
-     * The actual physical load address (1MB) is handled by the bootloader.
+     * In Story 3.2, this will change to 0xC0100000 for the higher-half
+     * kernel, with AT(0x100000) specifying the physical load address.
      */
-    . = 0xC0100000;
+    . = 0x100000;
 
     /*
-     * _kernel_start = .
+     * _kernel_start
      *
-     * Creates a symbol at the current address. C code can reference this
-     * as 'extern char _kernel_start;' to know where the kernel begins.
+     * Mark the beginning of the kernel image. Used by the memory
+     * manager to know where the kernel starts in physical memory.
      */
     _kernel_start = .;
 
     /*
-     * .text ALIGN(0x1000) : { ... }
+     * .text - Code Section
      *
-     * CODE SECTION
+     * Contains all executable code. The .text.boot section is placed
+     * first to ensure _start is at address 0x100000.
      *
-     * Contains all executable machine code. ALIGN(0x1000) ensures it starts
-     * on a 4KB page boundary for proper memory protection (execute permission).
-     *
-     * *(.text) means: "include .text sections from ALL input object files"
-     * *(.text.*) catches sections like .text.unlikely (compiler-generated)
+     * Aligned to 4KB for page-level execute permission (future).
      */
     .text ALIGN(0x1000) :
     {
-        *(.text)
-        *(.text.*)
+        *(.text.boot)   /* Entry point MUST be first */
+        *(.text)        /* All other code */
+        *(.text.*)      /* Compiler-generated sections */
     }
 
     /*
-     * .rodata ALIGN(0x1000) : { ... }
-     *
-     * READ-ONLY DATA SECTION
+     * .rodata - Read-Only Data Section
      *
      * Contains:
-     *   - String literals: "Hello, world!"
-     *   - const arrays: const int table[] = {1, 2, 3};
-     *   - Switch jump tables (compiler-generated)
+     *   - String literals
+     *   - const arrays
+     *   - Switch jump tables
      *
-     * Aligned to page boundary so we can mark these pages read-only.
-     * Any write attempt will cause a page fault (security feature).
+     * Aligned to 4KB for page-level read-only permission (future).
      */
     .rodata ALIGN(0x1000) :
     {
@@ -171,16 +130,12 @@ SECTIONS
     }
 
     /*
-     * .data ALIGN(0x1000) : { ... }
+     * .data - Initialized Data Section
      *
-     * INITIALIZED DATA SECTION
+     * Contains global/static variables with initial values.
+     * These values are stored in the binary.
      *
-     * Contains global/static variables with initial values:
-     *   int counter = 42;        // Goes in .data
-     *   static char buf[10] = "hi";  // Goes in .data
-     *
-     * These values are stored in the kernel binary and copied to RAM.
-     * The section is read-write (variables can be modified at runtime).
+     * Aligned to 4KB for page-level permissions (future).
      */
     .data ALIGN(0x1000) :
     {
@@ -189,52 +144,39 @@ SECTIONS
     }
 
     /*
-     * .bss ALIGN(0x1000) : { ... }
+     * .bss - Uninitialized Data Section
      *
-     * UNINITIALIZED DATA SECTION (Block Started by Symbol)
+     * Contains global/static variables without initial values.
+     * C requires these to be zero-initialized at runtime.
      *
-     * Contains global/static variables WITHOUT initial values:
-     *   int counter;             // Goes in .bss
-     *   static char buffer[1024]; // Goes in .bss
+     * _bss_start and _bss_end mark the region to zero in entry.S.
      *
-     * C guarantees these are zero-initialized. But we don't store zeros
-     * in the binary (waste of space). Instead:
-     *   1. Linker records the size of .bss
-     *   2. Kernel startup code zeros this memory region
-     *
-     * _bss_start and _bss_end mark the region to zero.
-     *
-     * COMMON contains old-style "common" symbols (Fortran legacy).
-     * Some compilers put uninitialized globals here instead of .bss.
+     * Aligned to 4KB for page-level permissions (future).
      */
     .bss ALIGN(0x1000) :
     {
         _bss_start = .;
         *(.bss)
         *(.bss.*)
-        *(COMMON)
+        *(COMMON)       /* Old-style common symbols */
         _bss_end = .;
     }
 
     /*
-     * _kernel_end = .
+     * _kernel_end
      *
-     * Marks the end of all kernel sections. The memory manager uses this
-     * to know where free memory begins (everything after _kernel_end is
-     * available for allocation).
+     * Mark the end of the kernel image. Everything after this address
+     * is free for dynamic allocation (once we have a memory manager).
      */
     _kernel_end = .;
 
     /*
-     * /DISCARD/ : { ... }
+     * /DISCARD/ - Sections to throw away
      *
-     * Sections listed here are thrown away (not included in output).
-     *
-     * .comment  - Compiler version strings (not needed at runtime)
-     * .note.*   - ELF notes (build-id, etc.)
-     * .eh_frame - C++ exception handling tables (we don't use exceptions)
-     *
-     * Discarding these makes the kernel binary smaller.
+     * These sections add no value at runtime and waste space:
+     *   .comment  - Compiler version strings
+     *   .note.*   - ELF notes (build-id, etc.)
+     *   .eh_frame - C++ exception handling (we don't use exceptions)
      */
     /DISCARD/ :
     {

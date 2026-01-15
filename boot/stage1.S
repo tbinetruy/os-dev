@@ -246,8 +246,8 @@ boot_drive:
  * =============================================================================
  */
 
-/* Number of sectors to load for stage 2 (4 sectors = 2KB) */
-.equ STAGE2_SECTORS, 4
+/* Number of sectors to load for stage 2 (12 sectors = 6KB) */
+.equ STAGE2_SECTORS, 12
 
 /* Number of disk read retry attempts before giving up */
 .equ DISK_RETRIES, 3
