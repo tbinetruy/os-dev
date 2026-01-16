@@ -1,0 +1,39 @@
+# GDB initialization script for os-dev kernel debugging
+#
+# Usage:
+#   1. Start QEMU with: make debug
+#   2. In another terminal: gdb -x scripts/gdbinit
+#   3. Or in GDB: source scripts/gdbinit
+#
+# This script:
+#   - Connects to QEMU's GDB stub on localhost:1234
+#   - Loads kernel symbols from build/kernel.elf
+#   - Sets a breakpoint at kmain
+#   - Prepares for kernel debugging
+
+# Connect to QEMU GDB stub
+target remote :1234
+
+# Load kernel symbols (assumes build in standard location)
+symbol-file build/kernel.elf
+
+# Set architecture (32-bit x86)
+set architecture i386
+
+# Useful breakpoints for kernel debugging
+break kmain
+break panic
+
+# Display source and assembly together
+# Uncomment if preferred:
+# layout split
+
+# Continue to first breakpoint (kmain)
+# Uncomment to auto-continue:
+# continue
+
+# Show we're ready
+echo \n*** GDB connected to QEMU ***\n
+echo Symbols loaded from build/kernel.elf\n
+echo Breakpoints set at: kmain, panic\n
+echo Type 'continue' to start execution\n\n

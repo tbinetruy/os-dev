@@ -41,6 +41,7 @@ TEST_BINS = $(patsubst host/test_%.c,test_%,$(TEST_SRCS))
 # =============================================================================
 
 KERNEL_SRCS_gdt = ../kernel/init/gdt.c
+KERNEL_SRCS_format = ../kernel/lib/format.c
 
 # Colors for output (optional, disable with NO_COLOR=1)
 ifndef NO_COLOR

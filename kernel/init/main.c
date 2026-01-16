@@ -31,6 +31,9 @@
 #include <gdt.h>
 #include <vga.h>
 #include <asm.h>
+#include <serial.h>
+#include <printk.h>
+#include <panic.h>
 
 #ifdef TEST_MODE
 #include <test.h>
@@ -45,30 +48,6 @@
 extern uint32_t boot_mmap_ptr;
 extern uint32_t boot_mmap_count;
 
-/*
- * print_num - Print a number (0-999) using VGA driver
- *
- * Helper function to display memory map count.
- *
- * Note: Duplicated in test_runner.c as test_print_num(). Both are
- * temporary helpers until printk is implemented in Story 1.6.
- * Intentionally kept separate to avoid cross-dependencies between
- * boot code and test infrastructure.
- */
-static void print_num(uint32_t num)
-{
-    if (num >= 100) {
-        vga_putchar('0' + (num / 100));
-        num %= 100;
-        vga_putchar('0' + (num / 10));
-        vga_putchar('0' + (num % 10));
-    } else if (num >= 10) {
-        vga_putchar('0' + (num / 10));
-        vga_putchar('0' + (num % 10));
-    } else {
-        vga_putchar('0' + num);
-    }
-}
 
 /*
  * kmain - Kernel main entry point
@@ -79,9 +58,10 @@ static void print_num(uint32_t num)
  * Initialization sequence:
  *   1. Initialize GDT (segment descriptors)
  *   2. Initialize VGA driver (text output)
- *   3. Display boot messages
- *   4. Run tests if TEST_MODE enabled
- *   5. Halt
+ *   3. Initialize serial driver (debug output)
+ *   4. Display boot messages via printk
+ *   5. Run tests if TEST_MODE enabled
+ *   6. Halt
  */
 void kmain(void)
 {
@@ -102,27 +82,24 @@ void kmain(void)
     vga_init();
 
     /*
-     * Display boot message
+     * Initialize serial driver
      *
-     * Shows we successfully:
-     *   - Loaded through bootloader stages
-     *   - Reached C code in protected mode
-     *   - Initialized GDT and VGA
+     * Configures COM1 for 38400 baud 8N1 output. This enables
+     * printk output to both serial and VGA from this point on.
      */
-    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    vga_puts("Hello from os-dev!\n");
-
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    vga_puts("GDT OK\n");
+    serial_init();
 
     /*
-     * Display memory map count
+     * Display boot progress via printk
      *
-     * Shows how many E820 memory map entries we got from BIOS.
+     * All kernel messages now go through printk which outputs to
+     * both serial (visible in QEMU -serial stdio) and VGA.
      */
-    vga_puts("Memory map entries: ");
-    print_num(boot_mmap_count);
-    vga_putchar('\n');
+    printk(LOG_INFO, "os-dev kernel starting\n");
+    printk(LOG_INFO, "GDT initialized\n");
+    printk(LOG_INFO, "VGA initialized\n");
+    printk(LOG_INFO, "Serial initialized\n");
+    printk(LOG_INFO, "Memory map entries: %d\n", boot_mmap_count);
 
     /*
      * Run tests if TEST_MODE is enabled
@@ -133,6 +110,8 @@ void kmain(void)
 #ifdef TEST_MODE
     test_run_all();
 #endif
+
+    printk(LOG_INFO, "Boot complete\n");
 
     /*
      * Halt
