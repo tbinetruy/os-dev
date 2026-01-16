@@ -4,7 +4,7 @@
  * Implements the test framework core functions and orchestrates
  * running all registered subsystem tests.
  *
- * Output is sent via serial (and VGA if available) in the format:
+ * Output is sent via VGA (and serial once available) in the format:
  *   [suite] Running tests...
  *   [PASS] test_name
  *   [FAIL] test_name: reason (file:line)
@@ -15,57 +15,8 @@
 
 #include <test.h>
 #include <types.h>
-
-/* TODO: Include these once implemented
- * #include <kernel.h>
- * #include <lib/printf.h>
- */
-
-/*
- * VGA text mode constants for test result display
- */
-#define VGA_BUFFER      ((volatile uint16_t *)0xB8000)
-#define VGA_WIDTH       80
-#define VGA_COLOR_GREEN 0x0A    /* Light green on black */
-#define VGA_COLOR_RED   0x0C    /* Light red on black */
-#define VGA_COLOR_WHITE 0x0F    /* White on black */
-
-/*
- * vga_put - Write a character to VGA at position
- */
-static void vga_put(int pos, char c, uint8_t color)
-{
-    VGA_BUFFER[pos] = (uint16_t)c | ((uint16_t)color << 8);
-}
-
-/*
- * vga_puts - Write a string to VGA starting at position
- */
-static void vga_puts(int pos, const char *s, uint8_t color)
-{
-    while (*s) {
-        vga_put(pos++, *s++, color);
-    }
-}
-
-/*
- * vga_put_num - Write a number to VGA (0-999)
- */
-static int vga_put_num(int pos, int num, uint8_t color)
-{
-    if (num >= 100) {
-        vga_put(pos++, '0' + (num / 100), color);
-        num %= 100;
-        vga_put(pos++, '0' + (num / 10), color);
-        vga_put(pos++, '0' + (num % 10), color);
-    } else if (num >= 10) {
-        vga_put(pos++, '0' + (num / 10), color);
-        vga_put(pos++, '0' + (num % 10), color);
-    } else {
-        vga_put(pos++, '0' + num, color);
-    }
-    return pos;
-}
+#include <vga.h>
+#include <asm.h>
 
 /*
  * Global test statistics
@@ -89,6 +40,9 @@ extern void test_boot(void);
 /* Story 1.4: GDT setup */
 extern void test_gdt(void);
 
+/* Story 1.5: VGA text mode driver */
+extern void test_vga(void);
+
 /* Milestone 3: Memory Management */
 /* extern void test_pmm(void); */
 /* extern void test_bitmap(void); */
@@ -103,21 +57,27 @@ extern void test_gdt(void);
 /* extern void test_string(void); */
 
 /*
- * Stub printk until kernel/lib/printf.c is implemented
- * Replace with actual printk once available
+ * test_print_num - Print a number (0-999) to VGA
+ *
+ * Helper until printk is available.
+ *
+ * Note: Similar to print_num() in main.c. Both are temporary helpers
+ * until printk is implemented in Story 1.6. Kept separate to avoid
+ * cross-dependencies between test infrastructure and boot code.
  */
-static void test_printk(const char *fmt, ...)
+static void test_print_num(int num)
 {
-    /*
-     * TODO: Replace with actual printk call
-     * For now, this is a placeholder that will be replaced
-     * once serial output is available.
-     *
-     * When serial driver is ready:
-     *   #include <lib/printf.h>
-     *   printk(LOG_INFO, fmt, ...);
-     */
-    (void)fmt;
+    if (num >= 100) {
+        vga_putchar('0' + (num / 100));
+        num %= 100;
+        vga_putchar('0' + (num / 10));
+        vga_putchar('0' + (num % 10));
+    } else if (num >= 10) {
+        vga_putchar('0' + (num / 10));
+        vga_putchar('0' + (num % 10));
+    } else {
+        vga_putchar('0' + num);
+    }
 }
 
 /*
@@ -130,7 +90,11 @@ void test_begin(const char *suite_name)
     test_current_suite = suite_name;
     suite_passed = 0;
     suite_failed = 0;
-    test_printk("[%s] Running tests...\n", suite_name);
+
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    vga_putchar('[');
+    vga_puts(suite_name);
+    vga_puts("] Running tests...\n");
 }
 
 /*
@@ -140,8 +104,15 @@ void test_begin(const char *suite_name)
  */
 void test_end(void)
 {
-    test_printk("[%s] %d passed, %d failed\n\n",
-                test_current_suite, suite_passed, suite_failed);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    vga_putchar('[');
+    vga_puts(test_current_suite);
+    vga_puts("] ");
+    test_print_num(suite_passed);
+    vga_puts(" passed, ");
+    test_print_num(suite_failed);
+    vga_puts(" failed\n");
+
     test_passed_count += suite_passed;
     test_failed_count += suite_failed;
 }
@@ -151,7 +122,11 @@ void test_end(void)
  */
 void test_pass(const char *name)
 {
-    test_printk("[PASS] %s\n", name);
+    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    vga_puts("[PASS] ");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    vga_puts(name);
+    vga_putchar('\n');
     suite_passed++;
 }
 
@@ -161,7 +136,17 @@ void test_pass(const char *name)
 void test_fail(const char *name, const char *reason,
                const char *file, int line)
 {
-    test_printk("[FAIL] %s: %s (%s:%d)\n", name, reason, file, line);
+    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    vga_puts("[FAIL] ");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    vga_puts(name);
+    vga_puts(": ");
+    vga_puts(reason);
+    vga_puts(" (");
+    vga_puts(file);
+    vga_putchar(':');
+    test_print_num(line);
+    vga_puts(")\n");
     suite_failed++;
 }
 
@@ -169,14 +154,14 @@ void test_fail(const char *name, const char *reason,
  * test_run_all - Execute all registered test suites
  *
  * Called from kmain() when TEST_MODE is enabled.
- * After all tests complete, the kernel halts.
+ * After all tests complete, the kernel halts on failure.
  */
 void test_run_all(void)
 {
-    test_printk("\n");
-    test_printk("========================================\n");
-    test_printk("       OS-DEV KERNEL TEST SUITE        \n");
-    test_printk("========================================\n\n");
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_puts("\n========================================\n");
+    vga_puts("       OS-DEV KERNEL TEST SUITE        \n");
+    vga_puts("========================================\n\n");
 
     test_passed_count = 0;
     test_failed_count = 0;
@@ -192,6 +177,9 @@ void test_run_all(void)
     /* Story 1.4: GDT setup */
     test_gdt();
 
+    /* Story 1.5: VGA text mode driver */
+    test_vga();
+
     /* Milestone 3: Memory */
     /* test_pmm(); */
     /* test_bitmap(); */
@@ -206,50 +194,39 @@ void test_run_all(void)
     /* test_string(); */
 
     /* Print final summary */
-    test_printk("========================================\n");
-    test_printk("  TOTAL: %d passed, %d failed\n",
-                test_passed_count, test_failed_count);
-    test_printk("========================================\n");
-
-    /*
-     * Display test results on VGA (visible until serial driver ready)
-     *
-     * Format on line 2 (below "OK" and "M:X"):
-     *   TEST: X passed, Y failed [PASS] or [FAIL]
-     */
-    int pos = VGA_WIDTH * 2;  /* Start at line 2 */
-    vga_puts(pos, "TEST: ", VGA_COLOR_WHITE);
-    pos += 6;
-    pos = vga_put_num(pos, test_passed_count, VGA_COLOR_GREEN);
-    vga_puts(pos, " passed, ", VGA_COLOR_WHITE);
-    pos += 9;
-    pos = vga_put_num(pos, test_failed_count,
-                      test_failed_count > 0 ? VGA_COLOR_RED : VGA_COLOR_WHITE);
-    vga_puts(pos, " failed ", VGA_COLOR_WHITE);
-    pos += 8;
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_puts("\n========================================\n");
+    vga_puts("  TOTAL: ");
+    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    test_print_num(test_passed_count);
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_puts(" passed, ");
 
     if (test_failed_count > 0) {
-        test_printk("\n*** TESTS FAILED ***\n");
-        /* Display [FAIL] in red */
-        vga_puts(pos, "[FAIL]", VGA_COLOR_RED);
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    }
+    test_print_num(test_failed_count);
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_puts(" failed\n");
+    vga_puts("========================================\n\n");
+
+    if (test_failed_count > 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        vga_puts("*** TESTS FAILED ***\n");
 
         /*
          * Halt on failure - don't let kernel continue with broken state
          */
-        test_printk("\nTest failure. Halting.\n");
         while (1) {
-            __asm__ volatile ("hlt");
+            hlt();
         }
     } else {
-        test_printk("\n*** ALL TESTS PASSED ***\n");
-        /* Display [PASS] in green */
-        vga_puts(pos, "[PASS]", VGA_COLOR_GREEN);
+        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        vga_puts("*** ALL TESTS PASSED ***\n");
     }
 
-    /*
-     * Tests passed - return to kmain for normal operation
-     */
-    test_printk("\nTest run complete.\n");
+    /* Reset color for subsequent output */
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
 #endif /* TEST_MODE */
