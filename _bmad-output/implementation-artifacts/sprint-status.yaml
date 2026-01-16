@@ -48,7 +48,7 @@ development_status:
   1-4-kernel-entry-gdt-setup: done
   1-5-vga-text-mode-driver: done
   1-6-serial-debug-panic-infrastructure: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Interrupt Handling & Device I/O
   epic-2: backlog
