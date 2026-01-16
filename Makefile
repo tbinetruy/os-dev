@@ -77,7 +77,7 @@ KERNEL_SECTOR := 13
 # Phony Targets
 # =============================================================================
 
-.PHONY: all image qemu debug clean dirs test
+.PHONY: all image qemu debug clean dirs test host-test
 
 all: dirs $(KERNEL_BIN)
 
@@ -93,6 +93,12 @@ test:
 	@sleep 3
 	@pkill -f "qemu-system-i386.*$(DISK_IMG)" || true
 	@echo "Test run complete (check serial output above)"
+
+# Host-side tests: pure algorithm tests compiled with host compiler
+# These run on the development machine, not in QEMU
+# Delegates to tests/Makefile which handles kernel-linked tests
+host-test:
+	@$(MAKE) -C tests
 
 # =============================================================================
 # Directory Creation

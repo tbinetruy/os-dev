@@ -1,6 +1,18 @@
 #ifndef KERNEL_INCLUDE_TYPES_H
 #define KERNEL_INCLUDE_TYPES_H
 
+/*
+ * When compiling for host-side tests (HOST_TEST defined), use standard headers.
+ * When compiling freestanding (kernel), define types manually.
+ */
+#ifdef HOST_TEST
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#else /* Freestanding / kernel build */
+
 /* Fixed-width integer types */
 typedef signed char        int8_t;
 typedef unsigned char      uint8_t;
@@ -27,5 +39,7 @@ typedef _Bool bool;
 
 /* NULL pointer */
 #define NULL ((void *)0)
+
+#endif /* HOST_TEST */
 
 #endif /* KERNEL_INCLUDE_TYPES_H */

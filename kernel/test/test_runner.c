@@ -86,6 +86,9 @@ static int suite_failed = 0;
 /* Story 1.3: Boot verification */
 extern void test_boot(void);
 
+/* Story 1.4: GDT setup */
+extern void test_gdt(void);
+
 /* Milestone 3: Memory Management */
 /* extern void test_pmm(void); */
 /* extern void test_bitmap(void); */
@@ -185,6 +188,9 @@ void test_run_all(void)
 
     /* Story 1.3: Boot verification */
     test_boot();
+
+    /* Story 1.4: GDT setup */
+    test_gdt();
 
     /* Milestone 3: Memory */
     /* test_pmm(); */

@@ -30,6 +30,7 @@
  */
 
 #include <types.h>
+#include <gdt.h>
 
 #ifdef TEST_MODE
 #include <test.h>
@@ -108,6 +109,14 @@ static inline uint16_t vga_entry(char c, uint8_t fg, uint8_t bg)
 void kmain(void)
 {
     /*
+     * Initialize GDT (must be first - we need proper segments)
+     *
+     * This replaces the minimal bootloader GDT with the kernel's
+     * complete GDT including user mode and TSS placeholders.
+     */
+    gdt_init();
+
+    /*
      * Clear the VGA screen
      *
      * Fill the entire screen with spaces (blank characters) with
@@ -118,18 +127,23 @@ void kmain(void)
     }
 
     /*
-     * Display "OK" at the top-left corner
+     * Display "GDT OK" at the top-left corner
      *
      * This shows that:
      *   - Stage 1 loaded stage 2
      *   - Stage 2 enabled A20, loaded kernel, switched to protected mode
      *   - Kernel entry point was reached
      *   - C runtime is working (BSS cleared, stack set up)
+     *   - GDT initialized successfully (didn't triple fault)
      *
      * We use green on black for visibility.
      */
-    VGA_BUFFER[0] = vga_entry('O', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    VGA_BUFFER[1] = vga_entry('K', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    VGA_BUFFER[0] = vga_entry('G', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    VGA_BUFFER[1] = vga_entry('D', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    VGA_BUFFER[2] = vga_entry('T', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    VGA_BUFFER[3] = vga_entry(' ', VGA_COLOR_BLACK, VGA_COLOR_BLACK);
+    VGA_BUFFER[4] = vga_entry('O', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    VGA_BUFFER[5] = vga_entry('K', VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
 
     /*
      * Display memory map count (for debugging)
