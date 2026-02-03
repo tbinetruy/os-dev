@@ -30,6 +30,8 @@
 #include <types.h>
 #include <gdt.h>
 #include <idt.h>
+#include <pic.h>
+#include <timer.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -99,6 +101,24 @@ void kmain(void)
     idt_init();
 
     /*
+     * Initialize PIC (Story 2.2)
+     *
+     * Remaps IRQs to avoid conflicts with CPU exceptions:
+     *   IRQ 0-7  → INT 32-39
+     *   IRQ 8-15 → INT 40-47
+     * All IRQs are masked (disabled) after initialization.
+     */
+    pic_init();
+
+    /*
+     * Initialize Timer (Story 2.2)
+     *
+     * Configures PIT for 100 Hz (10ms interval) and enables IRQ 0.
+     * Timer interrupts won't fire until STI enables interrupts.
+     */
+    timer_init();
+
+    /*
      * Display boot progress via printk
      *
      * All kernel messages now go through printk which outputs to
@@ -109,7 +129,18 @@ void kmain(void)
     printk(LOG_INFO, "VGA initialized\n");
     printk(LOG_INFO, "Serial initialized\n");
     printk(LOG_INFO, "IDT initialized\n");
+    printk(LOG_INFO, "PIC initialized\n");
+    printk(LOG_INFO, "Timer initialized (%d Hz)\n", TARGET_HZ);
     printk(LOG_INFO, "Memory map entries: %d\n", boot_mmap_count);
+
+    /*
+     * Enable interrupts (Story 2.2)
+     *
+     * Now that PIC and timer are configured, enable CPU interrupts.
+     * Timer interrupt (IRQ 0) will start firing at 100 Hz.
+     */
+    sti();
+    printk(LOG_INFO, "Interrupts enabled\n");
 
     /*
      * Run tests if TEST_MODE is enabled
@@ -124,13 +155,13 @@ void kmain(void)
     printk(LOG_INFO, "Boot complete\n");
 
     /*
-     * Halt
+     * Idle loop
      *
-     * We're done for this story. The HLT instruction stops the CPU
-     * until an interrupt occurs. Since interrupts are disabled,
-     * this effectively stops execution.
+     * The HLT instruction puts the CPU into a low-power state
+     * until an interrupt occurs. With timer running at 100 Hz,
+     * HLT will return approximately every 10ms.
      *
-     * In later stories, we'll have a proper scheduler loop here.
+     * In later stories, the scheduler will run here.
      */
     for (;;) {
         hlt();

@@ -230,3 +230,134 @@ isr_common:
     iret
 
 .size isr_common, . - isr_common
+
+/*
+ * =============================================================================
+ * IRQ Stubs (Hardware Interrupts)
+ * =============================================================================
+ *
+ * IRQs are hardware interrupts from external devices (timer, keyboard, etc.).
+ * After PIC remapping (Story 2.2):
+ *   IRQ 0-7  → INT 32-39 (master PIC)
+ *   IRQ 8-15 → INT 40-47 (slave PIC)
+ *
+ * IRQs never have error codes, but we push a dummy 0 for consistent
+ * stack layout with exceptions.
+ */
+
+/*
+ * Macro for IRQ stubs
+ *
+ * @num:     IRQ number (0-15)
+ * @int_num: Interrupt number after remapping (32-47)
+ */
+.macro IRQ num, int_num
+.global irq\num
+.type irq\num, @function
+irq\num:
+    pushl $0            /* Dummy error code */
+    pushl $\int_num     /* Interrupt number */
+    jmp irq_common
+.size irq\num, . - irq\num
+.endm
+
+/* IRQ 0-7: Master PIC (mapped to INT 32-39) */
+IRQ 0, 32       /* Timer */
+IRQ 1, 33       /* Keyboard */
+IRQ 2, 34       /* Cascade (slave PIC) */
+IRQ 3, 35       /* COM2 */
+IRQ 4, 36       /* COM1 */
+IRQ 5, 37       /* LPT2 / Sound */
+IRQ 6, 38       /* Floppy */
+IRQ 7, 39       /* LPT1 / Spurious */
+
+/* IRQ 8-15: Slave PIC (mapped to INT 40-47) */
+IRQ 8, 40       /* RTC */
+IRQ 9, 41       /* ACPI / Legacy IRQ2 */
+IRQ 10, 42      /* Available */
+IRQ 11, 43      /* Available */
+IRQ 12, 44      /* PS/2 Mouse */
+IRQ 13, 45      /* FPU */
+IRQ 14, 46      /* Primary ATA */
+IRQ 15, 47      /* Secondary ATA */
+
+/*
+ * irq_common - Common IRQ handler stub
+ *
+ * Purpose:
+ *   Save all CPU state, call C handler, restore state, and return.
+ *   Similar to isr_common but calls irq_handler instead.
+ *
+ * The stack layout is identical to exceptions:
+ *   [SS, ESP]     (only on privilege change)
+ *   EFLAGS
+ *   CS
+ *   EIP
+ *   Error Code    (dummy 0)
+ *   Interrupt #   (32-47)
+ *
+ * After our pushes:
+ *   General regs  (via pushal)
+ *   Segment regs  (DS, ES, FS, GS)
+ *
+ * Clobbers:
+ *   None (all registers restored)
+ */
+.global irq_common
+.type irq_common, @function
+irq_common:
+    /*
+     * Save general-purpose registers
+     */
+    pushal
+
+    /*
+     * Save segment registers
+     */
+    pushl %ds
+    pushl %es
+    pushl %fs
+    pushl %gs
+
+    /*
+     * Load kernel data segment
+     */
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+
+    /*
+     * Call C handler
+     *
+     * Pass pointer to struct registers.
+     */
+    pushl %esp
+    call irq_handler
+    addl $4, %esp
+
+    /*
+     * Restore segment registers
+     */
+    popl %gs
+    popl %fs
+    popl %es
+    popl %ds
+
+    /*
+     * Restore general-purpose registers
+     */
+    popal
+
+    /*
+     * Remove interrupt number and error code from stack
+     */
+    addl $8, %esp
+
+    /*
+     * Return from interrupt
+     */
+    iret
+
+.size irq_common, . - irq_common

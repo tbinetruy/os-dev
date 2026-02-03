@@ -50,6 +50,10 @@ extern void test_printk(void);
 /* Story 2.1: IDT setup */
 extern void test_idt(void);
 
+/* Story 2.2: PIC and Timer */
+extern void test_pic(void);
+extern void test_timer(void);
+
 /* Milestone 3: Memory Management */
 /* extern void test_pmm(void); */
 /* extern void test_bitmap(void); */
@@ -145,6 +149,10 @@ void test_run_all(void)
 
     /* Story 2.1: IDT setup */
     test_idt();
+
+    /* Story 2.2: PIC and Timer */
+    test_pic();
+    test_timer();
 
     /* Milestone 3: Memory */
     /* test_pmm(); */

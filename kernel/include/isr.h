@@ -133,4 +133,63 @@ extern void isr31(void);    /* Reserved */
  */
 void isr_handler(struct registers *regs);
 
+/*
+ * =============================================================================
+ * IRQ Handler Support (Story 2.2)
+ * =============================================================================
+ */
+
+/*
+ * IRQ stub declarations (defined in isr_stubs.S)
+ *
+ * These assembly stubs handle hardware interrupts from devices.
+ * After PIC remapping, IRQs map to INT 32-47.
+ */
+extern void irq0(void);     /* IRQ 0:  Timer (INT 32) */
+extern void irq1(void);     /* IRQ 1:  Keyboard (INT 33) */
+extern void irq2(void);     /* IRQ 2:  Cascade (INT 34) */
+extern void irq3(void);     /* IRQ 3:  COM2 (INT 35) */
+extern void irq4(void);     /* IRQ 4:  COM1 (INT 36) */
+extern void irq5(void);     /* IRQ 5:  LPT2 (INT 37) */
+extern void irq6(void);     /* IRQ 6:  Floppy (INT 38) */
+extern void irq7(void);     /* IRQ 7:  LPT1 (INT 39) */
+extern void irq8(void);     /* IRQ 8:  RTC (INT 40) */
+extern void irq9(void);     /* IRQ 9:  ACPI (INT 41) */
+extern void irq10(void);    /* IRQ 10: Available (INT 42) */
+extern void irq11(void);    /* IRQ 11: Available (INT 43) */
+extern void irq12(void);    /* IRQ 12: PS/2 Mouse (INT 44) */
+extern void irq13(void);    /* IRQ 13: FPU (INT 45) */
+extern void irq14(void);    /* IRQ 14: Primary ATA (INT 46) */
+extern void irq15(void);    /* IRQ 15: Secondary ATA (INT 47) */
+
+/*
+ * IRQ handler function pointer type
+ *
+ * Device drivers register handlers of this type to handle their IRQs.
+ */
+typedef void (*irq_handler_t)(struct registers *);
+
+/*
+ * irq_register_handler - Register a handler for an IRQ
+ *
+ * Device drivers call this to register their interrupt handler.
+ * When the specified IRQ fires, the handler will be called with
+ * the saved register state.
+ *
+ * @irq:     IRQ number (0-15)
+ * @handler: Function to call when IRQ fires
+ */
+void irq_register_handler(uint8_t irq, irq_handler_t handler);
+
+/*
+ * irq_handler - Common C handler for all IRQs
+ *
+ * Called by irq_common (assembly) after registers are saved.
+ * Dispatches to the registered handler for the IRQ, then
+ * sends EOI to the PIC.
+ *
+ * @regs: Pointer to saved register state on stack
+ */
+void irq_handler(struct registers *regs);
+
 #endif /* KERNEL_INCLUDE_ISR_H */

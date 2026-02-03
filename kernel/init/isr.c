@@ -16,6 +16,8 @@
 
 #include <isr.h>
 #include <idt.h>
+#include <pic.h>
+#include <asm.h>
 #include <printk.h>
 #include <panic.h>
 
@@ -168,4 +170,121 @@ void isr_handler(struct registers *regs)
     printk(LOG_ERROR, "========================================\n");
 
     panic("Unhandled CPU exception");
+}
+
+/*
+ * =============================================================================
+ * IRQ Handler Support (Story 2.2)
+ * =============================================================================
+ */
+
+/*
+ * IRQ handler table
+ *
+ * Device drivers register their handlers here via irq_register_handler().
+ * When an IRQ fires, irq_handler() looks up and calls the registered function.
+ *
+ * Index 0-15 corresponds to IRQ 0-15.
+ */
+static irq_handler_t irq_handlers[16] = {0};
+
+/*
+ * irq_register_handler - Register a handler for an IRQ
+ *
+ * @irq:     IRQ number (0-15)
+ * @handler: Function to call when IRQ fires (NULL to unregister)
+ */
+void irq_register_handler(uint8_t irq, irq_handler_t handler)
+{
+    if (irq >= 16) {
+        printk(LOG_WARN, "IRQ: invalid IRQ %d for register_handler\n", irq);
+        return;
+    }
+    irq_handlers[irq] = handler;
+}
+
+/*
+ * pic_read_isr - Read the In-Service Register from PIC
+ *
+ * Used to detect spurious IRQs. Returns bitmap of IRQs being serviced.
+ *
+ * @pic_port: PIC1_COMMAND (0x20) or PIC2_COMMAND (0xA0)
+ * Returns: ISR bitmap
+ */
+static inline uint8_t pic_read_isr(uint16_t pic_port)
+{
+    /* OCW3: Read ISR (0x0B) */
+    outb(pic_port, 0x0B);
+    return inb(pic_port);
+}
+
+/*
+ * irq_handler - Common C handler for hardware interrupts
+ *
+ * Called by irq_common (assembly) after registers are saved.
+ * Looks up the registered handler for the IRQ and calls it,
+ * then sends End-of-Interrupt to the PIC.
+ *
+ * Handles spurious IRQs on IRQ 7 and IRQ 15 by checking the ISR.
+ *
+ * @regs: Pointer to saved register state on stack
+ */
+void irq_handler(struct registers *regs)
+{
+    /*
+     * Calculate IRQ number from interrupt number
+     *
+     * After PIC remapping: INT 32-47 = IRQ 0-15
+     */
+    uint8_t irq = regs->int_no - 32;
+
+    /*
+     * Check for spurious IRQs
+     *
+     * The 8259 PIC can generate spurious interrupts on IRQ 7 (master)
+     * and IRQ 15 (slave). We detect these by reading the In-Service
+     * Register - if the corresponding bit is not set, it's spurious.
+     */
+    if (irq == 7) {
+        /* Check master PIC ISR for IRQ 7 */
+        if ((pic_read_isr(PIC1_COMMAND) & 0x80) == 0) {
+            /*
+             * Spurious IRQ 7 - do NOT send EOI.
+             *
+             * Master PIC never actually serviced an interrupt, so there's
+             * nothing to acknowledge. Sending EOI could incorrectly clear
+             * a different pending interrupt.
+             */
+            return;
+        }
+    } else if (irq == 15) {
+        /* Check slave PIC ISR for IRQ 15 */
+        if ((pic_read_isr(PIC2_COMMAND) & 0x80) == 0) {
+            /*
+             * Spurious IRQ 15 - send EOI to master only.
+             *
+             * The slave PIC triggered the cascade line (IRQ 2) on master
+             * before the spurious condition was detected. Master registered
+             * a real interrupt on IRQ 2 that must be acknowledged, but slave
+             * should not receive EOI since it didn't actually service IRQ 15.
+             */
+            outb(PIC1_COMMAND, PIC_EOI);
+            return;
+        }
+    }
+
+    /*
+     * Call registered handler if one exists
+     */
+    if (irq < 16 && irq_handlers[irq] != NULL) {
+        irq_handlers[irq](regs);
+    }
+
+    /*
+     * Send End-of-Interrupt to PIC
+     *
+     * Must be done after handling to acknowledge the interrupt.
+     * For slave PIC IRQs (8-15), EOI goes to both PICs.
+     */
+    pic_send_eoi(irq);
 }
