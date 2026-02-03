@@ -54,6 +54,9 @@ extern void test_idt(void);
 extern void test_pic(void);
 extern void test_timer(void);
 
+/* Story 2.3: Keyboard */
+extern void test_keyboard(void);
+
 /* Milestone 3: Memory Management */
 /* extern void test_pmm(void); */
 /* extern void test_bitmap(void); */
@@ -153,6 +156,9 @@ void test_run_all(void)
     /* Story 2.2: PIC and Timer */
     test_pic();
     test_timer();
+
+    /* Story 2.3: Keyboard */
+    test_keyboard();
 
     /* Milestone 3: Memory */
     /* test_pmm(); */

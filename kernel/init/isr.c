@@ -288,3 +288,29 @@ void irq_handler(struct registers *regs)
      */
     pic_send_eoi(irq);
 }
+
+/*
+ * =============================================================================
+ * Test Support Functions
+ * =============================================================================
+ */
+
+#ifdef TEST_MODE
+
+/*
+ * irq_has_handler - Check if an IRQ has a registered handler
+ *
+ * Test helper to verify device drivers correctly register their handlers.
+ *
+ * @irq: IRQ number (0-15)
+ * Returns: true if a handler is registered, false otherwise
+ */
+bool irq_has_handler(uint8_t irq)
+{
+    if (irq >= 16) {
+        return false;
+    }
+    return irq_handlers[irq] != NULL;
+}
+
+#endif /* TEST_MODE */

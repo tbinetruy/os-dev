@@ -32,6 +32,7 @@
 #include <idt.h>
 #include <pic.h>
 #include <timer.h>
+#include <keyboard.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -119,6 +120,14 @@ void kmain(void)
     timer_init();
 
     /*
+     * Initialize Keyboard (Story 2.3)
+     *
+     * Registers IRQ 1 handler and enables keyboard interrupts.
+     * Keystrokes will be buffered for retrieval via keyboard_getchar().
+     */
+    keyboard_init();
+
+    /*
      * Display boot progress via printk
      *
      * All kernel messages now go through printk which outputs to
@@ -155,8 +164,9 @@ void kmain(void)
     printk(LOG_INFO, "Boot complete\n");
 
     /*
-     * Idle loop
+     * Main loop with keyboard echo
      *
+     * Echo keyboard input to VGA for manual testing.
      * The HLT instruction puts the CPU into a low-power state
      * until an interrupt occurs. With timer running at 100 Hz,
      * HLT will return approximately every 10ms.
@@ -164,6 +174,10 @@ void kmain(void)
      * In later stories, the scheduler will run here.
      */
     for (;;) {
+        int c = keyboard_getchar();
+        if (c != -1) {
+            vga_putchar((char)c);
+        }
         hlt();
     }
 }

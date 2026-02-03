@@ -148,4 +148,36 @@ static inline void hlt(void)
     __asm__ volatile ("hlt");
 }
 
+/*
+ * read_eflags - Read the EFLAGS register
+ *
+ * Returns: Current value of EFLAGS
+ */
+static inline uint32_t read_eflags(void)
+{
+    uint32_t eflags;
+    __asm__ volatile ("pushfl; popl %0" : "=r"(eflags));
+    return eflags;
+}
+
+/*
+ * write_eflags - Write to the EFLAGS register
+ *
+ * @eflags: Value to write to EFLAGS
+ */
+static inline void write_eflags(uint32_t eflags)
+{
+    __asm__ volatile ("pushl %0; popfl" : : "r"(eflags) : "cc");
+}
+
+/*
+ * interrupts_enabled - Check if interrupts are enabled
+ *
+ * Returns: true if IF flag is set, false otherwise
+ */
+static inline bool interrupts_enabled(void)
+{
+    return (read_eflags() & 0x200) != 0;
+}
+
 #endif /* KERNEL_INCLUDE_ASM_H */

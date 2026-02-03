@@ -54,7 +54,7 @@ development_status:
   epic-2: in-progress
   2-1-idt-setup-exception-handlers: done
   2-2-pic-timer-driver: done
-  2-3-keyboard-driver: backlog
+  2-3-keyboard-driver: done
   epic-2-retrospective: optional
 
   # Epic 3: Memory Management
