@@ -21,8 +21,8 @@
  * =============================================================================
  */
 
-/* VGA text buffer - volatile because hardware may change it */
-static volatile uint16_t *vga_buffer = (volatile uint16_t *)VGA_BUFFER_ADDR;
+/* VGA text buffer - use macro to avoid pointer corruption issues */
+#define VGA_BUFFER ((volatile uint16_t *)0xB8000)
 
 /* Current cursor position */
 static int cursor_row = 0;
@@ -83,12 +83,12 @@ static void vga_scroll(void)
 {
     /* Move rows 1-24 up to rows 0-23 */
     for (int i = 0; i < VGA_WIDTH * (VGA_HEIGHT - 1); i++) {
-        vga_buffer[i] = vga_buffer[i + VGA_WIDTH];
+        VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
     }
 
     /* Clear the last row */
     for (int i = VGA_WIDTH * (VGA_HEIGHT - 1); i < VGA_WIDTH * VGA_HEIGHT; i++) {
-        vga_buffer[i] = vga_entry(' ', current_color);
+        VGA_BUFFER[i] = vga_entry(' ', current_color);
     }
 
     /* Move cursor to last row */
@@ -136,7 +136,7 @@ void vga_putchar(char c)
     } else {
         /* Printable character: write to buffer */
         int pos = cursor_row * VGA_WIDTH + cursor_col;
-        vga_buffer[pos] = vga_entry(c, current_color);
+        VGA_BUFFER[pos] = vga_entry(c, current_color);
 
         /* Advance cursor */
         cursor_col++;
@@ -173,7 +173,7 @@ void vga_puts(const char *str)
 void vga_clear(void)
 {
     for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
-        vga_buffer[i] = vga_entry(' ', current_color);
+        VGA_BUFFER[i] = vga_entry(' ', current_color);
     }
 
     /* Reset cursor to top-left */

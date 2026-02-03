@@ -29,6 +29,7 @@
 
 #include <types.h>
 #include <gdt.h>
+#include <idt.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -90,6 +91,14 @@ void kmain(void)
     serial_init();
 
     /*
+     * Initialize IDT (exception handlers)
+     *
+     * Sets up CPU exception handlers (0-31). Interrupts remain
+     * disabled until PIC is configured (Story 2.2).
+     */
+    idt_init();
+
+    /*
      * Display boot progress via printk
      *
      * All kernel messages now go through printk which outputs to
@@ -99,6 +108,7 @@ void kmain(void)
     printk(LOG_INFO, "GDT initialized\n");
     printk(LOG_INFO, "VGA initialized\n");
     printk(LOG_INFO, "Serial initialized\n");
+    printk(LOG_INFO, "IDT initialized\n");
     printk(LOG_INFO, "Memory map entries: %d\n", boot_mmap_count);
 
     /*

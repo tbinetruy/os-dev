@@ -51,8 +51,8 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Interrupt Handling & Device I/O
-  epic-2: backlog
-  2-1-idt-setup-exception-handlers: backlog
+  epic-2: in-progress
+  2-1-idt-setup-exception-handlers: done
   2-2-pic-timer-driver: backlog
   2-3-keyboard-driver: backlog
   epic-2-retrospective: optional

@@ -47,6 +47,9 @@ extern void test_vga(void);
 extern void test_serial(void);
 extern void test_printk(void);
 
+/* Story 2.1: IDT setup */
+extern void test_idt(void);
+
 /* Milestone 3: Memory Management */
 /* extern void test_pmm(void); */
 /* extern void test_bitmap(void); */
@@ -139,6 +142,9 @@ void test_run_all(void)
     /* Story 1.6: Serial debug and printk */
     test_serial();
     test_printk();
+
+    /* Story 2.1: IDT setup */
+    test_idt();
 
     /* Milestone 3: Memory */
     /* test_pmm(); */
