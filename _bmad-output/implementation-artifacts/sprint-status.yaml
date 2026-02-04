@@ -58,8 +58,8 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Memory Management
-  epic-3: backlog
-  3-1-physical-memory-manager: backlog
+  epic-3: in-progress
+  3-1-physical-memory-manager: done
   3-2-paging-virtual-memory: backlog
   3-3-page-fault-handler: backlog
   3-4-kernel-heap-allocator: backlog

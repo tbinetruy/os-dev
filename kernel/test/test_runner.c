@@ -58,8 +58,7 @@ extern void test_timer(void);
 extern void test_keyboard(void);
 
 /* Milestone 3: Memory Management */
-/* extern void test_pmm(void); */
-/* extern void test_bitmap(void); */
+extern void test_pmm(void);
 
 /* Milestone 4: Paging */
 /* extern void test_vmm(void); */
@@ -161,8 +160,7 @@ void test_run_all(void)
     test_keyboard();
 
     /* Milestone 3: Memory */
-    /* test_pmm(); */
-    /* test_bitmap(); */
+    test_pmm();
 
     /* Milestone 4: Paging */
     /* test_vmm(); */

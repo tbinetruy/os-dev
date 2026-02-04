@@ -33,6 +33,7 @@
 #include <pic.h>
 #include <timer.h>
 #include <keyboard.h>
+#include <pmm.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -126,6 +127,14 @@ void kmain(void)
      * Keystrokes will be buffered for retrieval via keyboard_getchar().
      */
     keyboard_init();
+
+    /*
+     * Initialize Physical Memory Manager (Story 3.1)
+     *
+     * Parses E820 memory map and initializes bitmap allocator.
+     * After this, pmm_alloc_frame() can allocate physical pages.
+     */
+    pmm_init();
 
     /*
      * Display boot progress via printk

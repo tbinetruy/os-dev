@@ -28,7 +28,7 @@ include $(ROOT)/config.mk
 # =============================================================================
 
 # Kernel C sources
-KERNEL_C_SRCS := $(wildcard kernel/init/*.c) $(wildcard kernel/drivers/*.c) $(wildcard kernel/lib/*.c)
+KERNEL_C_SRCS := $(wildcard kernel/init/*.c) $(wildcard kernel/drivers/*.c) $(wildcard kernel/lib/*.c) $(wildcard kernel/mm/*.c)
 KERNEL_C_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_C_SRCS))
 
 # Kernel assembly sources
@@ -108,6 +108,7 @@ dirs:
 	@mkdir -p $(BUILD)/kernel/init
 	@mkdir -p $(BUILD)/kernel/drivers
 	@mkdir -p $(BUILD)/kernel/lib
+	@mkdir -p $(BUILD)/kernel/mm
 	@mkdir -p $(BUILD)/boot
 
 # =============================================================================
@@ -144,6 +145,11 @@ $(BUILD)/kernel/drivers/%.o: kernel/drivers/%.c
 
 # Also add TEST_MODE to lib sources for test builds
 $(BUILD)/kernel/lib/%.o: kernel/lib/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DTEST_MODE -c $< -o $@
+
+# Also add TEST_MODE to mm sources for test builds
+$(BUILD)/kernel/mm/%.o: kernel/mm/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DTEST_MODE -c $< -o $@
 endif
