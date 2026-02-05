@@ -80,8 +80,6 @@ static const char *exception_names[32] = {
  */
 static void page_fault_handler(struct registers *regs)
 {
-    uint32_t faulting_addr;
-
     /*
      * CRITICAL: Read CR2 FIRST
      *
@@ -89,43 +87,64 @@ static void page_fault_handler(struct registers *regs)
      * Any memory access (including function calls) could potentially
      * cause another page fault and overwrite CR2.
      */
-    __asm__ volatile ("movl %%cr2, %0" : "=r"(faulting_addr));
+    uint32_t faulting_addr = read_cr2();
 
-    /* Parse error code bits */
-    bool present = (regs->err_code & 0x1) != 0;
-    bool write   = (regs->err_code & 0x2) != 0;
-    bool user    = (regs->err_code & 0x4) != 0;
-    bool rsvd    = (regs->err_code & 0x8) != 0;
-    bool ifetch  = (regs->err_code & 0x10) != 0;
+    /* Parse error code bits using named constants */
+    bool present = (regs->err_code & PF_ERR_PRESENT) != 0;
+    bool write   = (regs->err_code & PF_ERR_WRITE) != 0;
+    bool user    = (regs->err_code & PF_ERR_USER) != 0;
 
-    printk(LOG_ERROR, "\n");
-    printk(LOG_ERROR, "========================================\n");
-    printk(LOG_ERROR, "EXCEPTION: Page Fault (#PF)\n");
-    printk(LOG_ERROR, "========================================\n");
-    printk(LOG_ERROR, "Faulting address: 0x%x\n", faulting_addr);
-    printk(LOG_ERROR, "Error code: 0x%x\n", regs->err_code);
-    printk(LOG_ERROR, "  %s\n", present ? "Protection violation" : "Page not present");
-    printk(LOG_ERROR, "  %s access\n", write ? "Write" : "Read");
-    printk(LOG_ERROR, "  %s mode\n", user ? "User" : "Kernel");
-    if (rsvd) {
-        printk(LOG_ERROR, "  Reserved bit violation\n");
-    }
-    if (ifetch) {
-        printk(LOG_ERROR, "  Instruction fetch (NX violation)\n");
-    }
-    printk(LOG_ERROR, "\n");
-    printk(LOG_ERROR, "EIP: 0x%x  CS: 0x%x\n", regs->eip, regs->cs);
-    printk(LOG_ERROR, "EFLAGS: 0x%x\n", regs->eflags);
+    printk(LOG_ERROR, "PAGE FAULT at 0x%x\n", faulting_addr);
+    printk(LOG_ERROR, "Error: %s %s %s\n",
+           write ? "write" : "read",
+           user ? "user" : "kernel",
+           present ? "present" : "not-present");
+    printk(LOG_ERROR, "Faulting EIP: 0x%x\n", regs->eip);
+
+    if (regs->err_code & PF_ERR_RSVD)
+        printk(LOG_ERROR, "Reserved bit violation in PTE\n");
+    if (regs->err_code & PF_ERR_IFETCH)
+        printk(LOG_ERROR, "Instruction fetch fault\n");
+
+    /* Interrupt frame register dump for debugging */
+    printk(LOG_ERROR, "CS: 0x%x  EFLAGS: 0x%x\n",
+           regs->cs, regs->eflags);
     printk(LOG_ERROR, "EAX: 0x%x  EBX: 0x%x  ECX: 0x%x  EDX: 0x%x\n",
            regs->eax, regs->ebx, regs->ecx, regs->edx);
     printk(LOG_ERROR, "ESP: 0x%x  EBP: 0x%x  ESI: 0x%x  EDI: 0x%x\n",
            regs->esp, regs->ebp, regs->esi, regs->edi);
     printk(LOG_ERROR, "DS: 0x%x  ES: 0x%x  FS: 0x%x  GS: 0x%x\n",
            regs->ds, regs->es, regs->fs, regs->gs);
-    printk(LOG_ERROR, "========================================\n");
 
-    panic("Page fault in kernel");
+    if (!user) {
+        /* Kernel-mode fault: unrecoverable, panic with context */
+        panic("Page fault in kernel");
+    } else {
+        /*
+         * TODO(Epic 5+): User-mode fault handling.
+         * For now, user-mode faults also panic since we have
+         * no user processes yet.
+         */
+        panic("Page fault in user mode");
+    }
 }
+
+#ifdef TEST_MODE
+
+/*
+ * Page fault test hook
+ *
+ * When non-NULL, isr_handler calls this instead of page_fault_handler
+ * for page faults. Tests set this to intercept faults without panicking.
+ */
+static void (*pf_test_hook)(struct registers *) = NULL;
+
+void pf_set_test_hook(void (*hook)(struct registers *))
+{
+    pf_test_hook = hook;
+}
+
+#endif /* TEST_MODE */
 
 /*
  * isr_handler - Common C handler for all exceptions
@@ -146,6 +165,12 @@ void isr_handler(struct registers *regs)
 
     /* Page fault gets special handling */
     if (regs->int_no == EXC_PAGE_FAULT) {
+#ifdef TEST_MODE
+        if (pf_test_hook) {
+            pf_test_hook(regs);
+            return;
+        }
+#endif
         page_fault_handler(regs);
         return;
     }

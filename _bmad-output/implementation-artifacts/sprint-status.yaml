@@ -61,7 +61,7 @@ development_status:
   epic-3: in-progress
   3-1-physical-memory-manager: done
   3-2-paging-virtual-memory: done
-  3-3-page-fault-handler: backlog
+  3-3-page-fault-handler: done
   3-4-kernel-heap-allocator: backlog
   epic-3-retrospective: optional
 

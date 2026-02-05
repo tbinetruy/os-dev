@@ -63,6 +63,9 @@ extern void test_pmm(void);
 /* Milestone 4: Paging (Story 3.2) */
 extern void test_vmm(void);
 
+/* Story 3.3: Page Fault Handler */
+extern void test_fault(void);
+
 /* Milestone 5-6: Process Management */
 /* extern void test_sched(void); */
 
@@ -164,6 +167,9 @@ void test_run_all(void)
 
     /* Milestone 4: Paging (Story 3.2) */
     test_vmm();
+
+    /* Story 3.3: Page Fault Handler */
+    test_fault();
 
     /* Milestone 5-6: Processes */
     /* test_sched(); */

@@ -82,6 +82,24 @@ struct registers {
 };
 
 /*
+ * Page fault error code bits (Intel SDM Vol 3, Section 4.7)
+ *
+ * When a page fault (INT 14) occurs, the CPU pushes an error code
+ * that describes the conditions under which the fault occurred.
+ *
+ *   Bit 0 (P):    0 = not-present page, 1 = protection violation
+ *   Bit 1 (W/R):  0 = read access, 1 = write access
+ *   Bit 2 (U/S):  0 = kernel mode, 1 = user mode
+ *   Bit 3 (RSVD): 1 = reserved bit set in page table entry
+ *   Bit 4 (I/D):  1 = instruction fetch caused fault
+ */
+#define PF_ERR_PRESENT  0x01
+#define PF_ERR_WRITE    0x02
+#define PF_ERR_USER     0x04
+#define PF_ERR_RSVD     0x08
+#define PF_ERR_IFETCH   0x10
+
+/*
  * ISR stub declarations (defined in isr.S)
  *
  * These assembly stubs are the actual handlers registered in the IDT.
@@ -191,5 +209,19 @@ void irq_register_handler(uint8_t irq, irq_handler_t handler);
  * @regs: Pointer to saved register state on stack
  */
 void irq_handler(struct registers *regs);
+
+#ifdef TEST_MODE
+
+/*
+ * pf_set_test_hook - Set/clear page fault test hook
+ *
+ * When set, the hook intercepts page faults before the real handler.
+ * Used by test_fault.c to test page fault handling without panicking.
+ *
+ * @hook: Function to call on page fault, or NULL to clear
+ */
+void pf_set_test_hook(void (*hook)(struct registers *));
+
+#endif /* TEST_MODE */
 
 #endif /* KERNEL_INCLUDE_ISR_H */

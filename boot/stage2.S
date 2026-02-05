@@ -61,7 +61,7 @@
  * So to read kernel at LBA 13, we use CHS sector 14.
  */
 .equ KERNEL_START_SECTOR, 14    /* CHS sector 14 = LBA sector 13 */
-.equ KERNEL_SECTORS, 64         /* Kernel sectors to read (32KB, room for growth) */
+.equ KERNEL_SECTORS, 128        /* Kernel sectors to read (64KB, room for growth) */
 .equ KERNEL_LOAD_SEG, 0x1000    /* Segment for 0x10000 */
 
 /* Memory addresses */
@@ -76,8 +76,8 @@
 
 /* Kernel size in double-words for copy operation */
 /* KERNEL_SECTORS * 512 bytes / 4 bytes per dword */
-/* 64 sectors * 512 / 4 = 8192 dwords (32KB) */
-.equ KERNEL_SIZE_DWORDS, 8192
+/* 128 sectors * 512 / 4 = 16384 dwords (64KB) */
+.equ KERNEL_SIZE_DWORDS, 16384
 
 
 /*
@@ -423,11 +423,11 @@ load_kernel:
     cmpw $0, %si
     je .load_done
 
-    /* Calculate how many sectors to read this iteration (max 64) */
+    /* Calculate how many sectors to read this iteration (max 128) */
     movw %si, %ax
-    cmpw $64, %ax
+    cmpw $128, %ax
     jbe .chunk_ok
-    movw $64, %ax
+    movw $128, %ax
 .chunk_ok:
     movw %ax, %di               /* DI = sectors to read this chunk */
 
