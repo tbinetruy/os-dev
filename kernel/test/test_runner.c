@@ -60,8 +60,8 @@ extern void test_keyboard(void);
 /* Milestone 3: Memory Management */
 extern void test_pmm(void);
 
-/* Milestone 4: Paging */
-/* extern void test_vmm(void); */
+/* Milestone 4: Paging (Story 3.2) */
+extern void test_vmm(void);
 
 /* Milestone 5-6: Process Management */
 /* extern void test_sched(void); */
@@ -162,8 +162,8 @@ void test_run_all(void)
     /* Milestone 3: Memory */
     test_pmm();
 
-    /* Milestone 4: Paging */
-    /* test_vmm(); */
+    /* Milestone 4: Paging (Story 3.2) */
+    test_vmm();
 
     /* Milestone 5-6: Processes */
     /* test_sched(); */

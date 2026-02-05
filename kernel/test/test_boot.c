@@ -16,6 +16,7 @@
 
 #include <test.h>
 #include <types.h>
+#include <vmm.h>
 
 /* Boot parameters from entry.S */
 extern uint32_t boot_mmap_ptr;
@@ -62,10 +63,11 @@ static void test_a20_enabled(void)
      * Write a value to address 0x100000 (1MB) and verify it doesn't
      * appear at address 0x000000 (which would indicate wrapping).
      *
-     * Use volatile to prevent compiler optimization.
+     * After Story 3.2, we must use P2V() to access physical addresses
+     * since the identity mapping has been removed.
      */
-    volatile uint32_t *addr_low = (volatile uint32_t *)0x000500;
-    volatile uint32_t *addr_high = (volatile uint32_t *)0x100500;
+    volatile uint32_t *addr_low = (volatile uint32_t *)P2V(0x000500);
+    volatile uint32_t *addr_high = (volatile uint32_t *)P2V(0x100500);
 
     uint32_t saved_low = *addr_low;
     uint32_t saved_high = *addr_high;
@@ -100,7 +102,7 @@ static void test_protected_mode(void)
 /*
  * test_kernel_address - Verify kernel is at correct address
  *
- * The _start symbol should be at 0x100000 (1MB).
+ * After Story 3.2, _start is at virtual 0xC0100000 (higher-half).
  */
 extern void _start(void);  /* From entry.S */
 
@@ -108,8 +110,13 @@ static void test_kernel_address(void)
 {
     uint32_t start_addr = (uint32_t)&_start;
 
-    TEST_ASSERT_MSG(start_addr == 0x100000,
-                    "Kernel _start not at 0x100000");
+    /* Kernel should be in higher-half (>= KERNEL_BASE) */
+    TEST_ASSERT_MSG(start_addr >= KERNEL_BASE,
+                    "Kernel _start not in higher-half");
+
+    /* Specifically should be at 0xC0100000 */
+    TEST_ASSERT_MSG(start_addr == 0xC0100000,
+                    "Kernel _start not at 0xC0100000");
 }
 
 /*

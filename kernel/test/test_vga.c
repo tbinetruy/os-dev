@@ -15,9 +15,10 @@
 #include <test.h>
 #include <vga.h>
 #include <types.h>
+#include <vmm.h>
 
-/* Direct access to VGA buffer for verification */
-#define TEST_VGA_BUFFER ((volatile uint16_t *)0xB8000)
+/* Direct access to VGA buffer for verification (must use P2V for higher-half) */
+#define TEST_VGA_BUFFER ((volatile uint16_t *)P2V(0xB8000))
 
 /*
  * Helper to extract character from VGA entry

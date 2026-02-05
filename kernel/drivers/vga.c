@@ -13,6 +13,7 @@
  */
 
 #include <vga.h>
+#include <vmm.h>
 #include <asm.h>
 
 /*
@@ -21,8 +22,13 @@
  * =============================================================================
  */
 
-/* VGA text buffer - use macro to avoid pointer corruption issues */
-#define VGA_BUFFER ((volatile uint16_t *)0xB8000)
+/*
+ * VGA text buffer - physical 0xB8000, virtual 0xC00B8000
+ *
+ * After paging is enabled, we access VGA through the higher-half
+ * mapping. Physical 0xB8000 is mapped to virtual P2V(0xB8000).
+ */
+#define VGA_BUFFER ((volatile uint16_t *)P2V(0xB8000))
 
 /* Current cursor position */
 static int cursor_row = 0;

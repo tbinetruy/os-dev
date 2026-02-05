@@ -11,11 +11,11 @@
  *   - Cleared BSS
  *   - Set up the stack
  *
- * At this point:
+ * At this point (after entry.S):
  *   - 32-bit protected mode
  *   - Interrupts disabled
- *   - Paging disabled (physical == virtual)
- *   - Running at physical 0x100000
+ *   - Paging enabled (higher-half kernel at 0xC0000000+)
+ *   - Running at virtual 0xC0100000+
  *
  * Initialization order:
  *   1. GDT setup (Story 1.4)
@@ -34,6 +34,7 @@
 #include <timer.h>
 #include <keyboard.h>
 #include <pmm.h>
+#include <vmm.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -137,6 +138,14 @@ void kmain(void)
     pmm_init();
 
     /*
+     * Initialize Virtual Memory Manager (Story 3.2)
+     *
+     * Paging was enabled by entry.S. This validates the paging setup
+     * and initializes VMM state. After this, vmm_map_page() can be used.
+     */
+    vmm_init();
+
+    /*
      * Display boot progress via printk
      *
      * All kernel messages now go through printk which outputs to
@@ -150,6 +159,7 @@ void kmain(void)
     printk(LOG_INFO, "PIC initialized\n");
     printk(LOG_INFO, "Timer initialized (%d Hz)\n", TARGET_HZ);
     printk(LOG_INFO, "Memory map entries: %d\n", boot_mmap_count);
+    printk(LOG_INFO, "VMM initialized (higher-half kernel)\n");
 
     /*
      * Enable interrupts (Story 2.2)

@@ -23,7 +23,9 @@
  */
 #define PAGE_SIZE       4096            /* 4KB per page frame */
 #define PAGE_SHIFT      12              /* log2(PAGE_SIZE) */
+#ifndef PAGE_MASK
 #define PAGE_MASK       (~(PAGE_SIZE - 1))
+#endif
 
 /*
  * Physical Memory Layout
@@ -33,9 +35,22 @@
  */
 #define KERNEL_PHYS_START   0x100000
 
-/* Linker-provided symbol marking end of kernel image */
+/*
+ * Linker-provided symbol marking end of kernel image (VIRTUAL address)
+ *
+ * After Story 3.2, _kernel_end is a virtual address (0xC0XXXXXX).
+ * Use V2P() to convert to physical address for frame calculations.
+ */
 extern char _kernel_end;
-#define KERNEL_PHYS_END     ((uint32_t)&_kernel_end)
+
+/*
+ * Get kernel physical end address
+ *
+ * This macro converts the virtual _kernel_end to physical.
+ * Note: KERNEL_VIRT_BASE is 0xC0000000 (defined in vmm.h).
+ */
+#define KERNEL_VIRT_BASE_CONST  0xC0000000
+#define KERNEL_PHYS_END     ((uint32_t)&_kernel_end - KERNEL_VIRT_BASE_CONST)
 
 /*
  * Frame Number Conversion Macros

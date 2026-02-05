@@ -21,6 +21,7 @@
  */
 
 #include <pmm.h>
+#include <vmm.h>
 #include <mmap.h>
 #include <bitmap.h>
 #include <string.h>
@@ -79,8 +80,14 @@ void pmm_init(void)
     free_frame_count = 0;
     total_frame_count = 0;
 
-    /* Get memory map from bootloader */
-    mmap = (struct mmap_entry *)boot_mmap_ptr;
+    /*
+     * Get memory map from bootloader
+     *
+     * boot_mmap_ptr contains the PHYSICAL address of the memory map
+     * (at 0x504, set by stage2 bootloader). After paging is enabled,
+     * we must use P2V() to convert to virtual address for access.
+     */
+    mmap = (struct mmap_entry *)P2V(boot_mmap_ptr);
     count = boot_mmap_count;
 
     if (count == 0) {
