@@ -35,6 +35,7 @@
 #include <keyboard.h>
 #include <pmm.h>
 #include <vmm.h>
+#include <heap.h>
 #include <vga.h>
 #include <asm.h>
 #include <serial.h>
@@ -144,6 +145,14 @@ void kmain(void)
      * and initializes VMM state. After this, vmm_map_page() can be used.
      */
     vmm_init();
+
+    /*
+     * Initialize Kernel Heap Allocator (Story 3.4)
+     *
+     * Maps initial heap pages after _kernel_end and sets up the
+     * free list. After this, kmalloc()/kfree() are available.
+     */
+    heap_init();
 
     /*
      * Display boot progress via printk

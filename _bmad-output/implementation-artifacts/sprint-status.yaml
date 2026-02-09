@@ -62,7 +62,7 @@ development_status:
   3-1-physical-memory-manager: done
   3-2-paging-virtual-memory: done
   3-3-page-fault-handler: done
-  3-4-kernel-heap-allocator: backlog
+  3-4-kernel-heap-allocator: done
   epic-3-retrospective: optional
 
   # Epic 4: Kernel Threads & Scheduling

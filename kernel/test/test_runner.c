@@ -66,6 +66,9 @@ extern void test_vmm(void);
 /* Story 3.3: Page Fault Handler */
 extern void test_fault(void);
 
+/* Story 3.4: Kernel Heap Allocator */
+extern void test_heap(void);
+
 /* Milestone 5-6: Process Management */
 /* extern void test_sched(void); */
 
@@ -170,6 +173,9 @@ void test_run_all(void)
 
     /* Story 3.3: Page Fault Handler */
     test_fault();
+
+    /* Story 3.4: Kernel Heap Allocator */
+    test_heap();
 
     /* Milestone 5-6: Processes */
     /* test_sched(); */

@@ -43,6 +43,24 @@ TEST_BINS = $(patsubst host/test_%.c,test_%,$(TEST_SRCS))
 KERNEL_SRCS_gdt = ../kernel/init/gdt.c
 KERNEL_SRCS_format = ../kernel/lib/format.c
 
+# =============================================================================
+# Per-Test Compiler/Linker Flags
+# =============================================================================
+# Some tests need extra flags (e.g., -m32 for 32-bit pointer layout).
+#
+# To add per-test flags:
+#   CFLAGS_NAME  = <extra compiler flags>
+#   LDFLAGS_NAME = <extra linker flags>
+# =============================================================================
+
+# Heap test: --defsym aliases _kernel_end to heap_buf so the heap uses
+# accessible memory. -fno-pie/-no-pie keeps addresses in the lower 4GB
+# so uint32_t address casts in the kernel code work correctly.
+# Pointer-width warnings are suppressed since the kernel uses uint32_t
+# for addresses (safe when addresses fit in 32 bits).
+CFLAGS_heap  = -Wno-pedantic -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -fno-pie
+LDFLAGS_heap = -no-pie -Wl,--defsym,_kernel_end=heap_buf
+
 # Colors for output (optional, disable with NO_COLOR=1)
 ifndef NO_COLOR
     GREEN = \033[0;32m
@@ -67,9 +85,10 @@ build: $(TEST_BINS)
 
 # Build individual test binary
 # If KERNEL_SRCS_% is defined, link against those kernel sources
+# If CFLAGS_% / LDFLAGS_% are defined, they are appended for that test
 test_%: host/test_%.c $(UNITY_SRC)
 	@echo "$(YELLOW)Building $@...$(NC)"
-	@$(CC) $(CFLAGS) -o $@ $^ $(KERNEL_SRCS_$*)
+	@$(CC) $(CFLAGS) $(CFLAGS_$*) -o $@ $^ $(KERNEL_SRCS_$*) $(LDFLAGS_$*)
 
 # Run all tests
 test: $(TEST_BINS)
