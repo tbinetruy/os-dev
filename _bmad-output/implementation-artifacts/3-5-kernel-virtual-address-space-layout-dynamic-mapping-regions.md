@@ -1,6 +1,6 @@
 # Story 3.5: Kernel Virtual Address Space Layout & Dynamic Mapping Regions
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Approved corrective story. Implement and review before Story 4.1 resumes. -->
 
