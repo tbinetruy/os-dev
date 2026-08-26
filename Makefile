@@ -55,6 +55,7 @@ STAGE2_SRC := boot/stage2.S
 
 KERNEL_ELF := $(BUILD)/kernel.elf
 KERNEL_BIN := $(BUILD)/kernel.bin
+KERNEL_MAX_SIZE := 65536
 STAGE1_BIN := $(BUILD)/boot/stage1.bin
 STAGE2_BIN := $(BUILD)/boot/stage2.bin
 DISK_IMG := $(BUILD)/os-dev.img
@@ -89,10 +90,14 @@ test:
 	$(MAKE) clean
 	$(MAKE) image TEST_MODE=1
 	@echo "Running tests in QEMU..."
-	qemu-system-i386 -drive file=$(DISK_IMG),format=raw -serial stdio -display none &
-	@sleep 3
-	@pkill -f "qemu-system-i386.*$(DISK_IMG)" || true
-	@echo "Test run complete (check serial output above)"
+	@timeout 5s qemu-system-i386 -drive file=$(DISK_IMG),format=raw \
+		-serial stdio -display none > $(BUILD)/test-serial.log 2>&1 || \
+		[ $$? -eq 124 ]
+	@cat $(BUILD)/test-serial.log
+	@grep -q "TOTAL: .* passed, 0 failed" $(BUILD)/test-serial.log
+	@grep -q "\*\*\* ALL TESTS PASSED \*\*\*" $(BUILD)/test-serial.log
+	@grep -q "Boot complete" $(BUILD)/test-serial.log
+	@echo "Test run complete: serial summary verified"
 
 # Host-side tests: pure algorithm tests compiled with host compiler
 # These run on the development machine, not in QEMU
@@ -162,6 +167,12 @@ $(KERNEL_ELF): $(KERNEL_OBJS) $(ROOT)/scripts/kernel.ld
 # Extract raw binary from ELF
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
+	@SIZE=$$(stat -c%s $@); \
+	if [ "$$SIZE" -gt "$(KERNEL_MAX_SIZE)" ]; then \
+		echo "ERROR: kernel.bin is $$SIZE bytes; stage 2 supports at most $(KERNEL_MAX_SIZE) bytes"; \
+		rm -f $@; \
+		exit 1; \
+	fi
 	@echo "Kernel size: $$(stat -c%s $@) bytes ($$(expr $$(stat -c%s $@) / 512 + 1) sectors)"
 
 # =============================================================================

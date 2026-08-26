@@ -4,7 +4,7 @@
  * Simple linked list allocator with first-fit algorithm.
  * Provides kmalloc()/kfree() for dynamic kernel memory allocation.
  *
- * The heap starts at the first page boundary after _kernel_end and
+ * The heap starts at its fixed VMM-owned region and
  * grows upward by requesting pages from PMM and mapping them via VMM.
  *
  * Block layout in memory:
@@ -61,6 +61,18 @@ static uint32_t heap_start;     /* Virtual address of heap start */
 static uint32_t heap_end;       /* Current mapped end of heap */
 static struct block_header *free_list;  /* First block in memory */
 
+extern uint8_t __kernel_heap_start[];
+
+static uint32_t heap_backing_address(void)
+{
+#ifdef HOST_TEST
+    extern char heap_buf[];
+    return (uint32_t)heap_buf;
+#else
+    return KERNEL_HEAP_START;
+#endif
+}
+
 /*
  * heap_expand - Grow the heap by allocating and mapping new pages
  *
@@ -84,12 +96,19 @@ static int heap_expand(uint32_t needed)
     struct block_header *last;
 
     /* Calculate pages needed (minimum HEAP_MIN_EXPAND_PAGES) */
-    pages_needed = (needed + PAGE_SIZE - 1) / PAGE_SIZE;
+    if (needed > 0xFFFFFFFFU - (PAGE_SIZE - 1U)) {
+        return -ENOMEM;
+    }
+    pages_needed = (needed + PAGE_SIZE - 1U) / PAGE_SIZE;
     if (pages_needed < HEAP_MIN_EXPAND_PAGES) {
         pages_needed = HEAP_MIN_EXPAND_PAGES;
     }
 
     new_start = heap_end;
+    if (pages_needed >
+        (KERNEL_HEAP_END_EXCLUSIVE - heap_end) / PAGE_SIZE) {
+        return -ENOMEM;
+    }
     pages_mapped = 0;
     failed = 0;
 
@@ -176,8 +195,12 @@ void heap_init(void)
     uint32_t i;
     uint32_t phys;
 
-    /* Heap starts at next page boundary after kernel end */
-    heap_start = PAGE_ALIGN_UP((uint32_t)&_kernel_end);
+    if ((uint32_t)__kernel_heap_start != KERNEL_HEAP_START) {
+#ifndef HOST_TEST
+        panic("HEAP: linker/C heap start mismatch");
+#endif
+    }
+    heap_start = heap_backing_address();
     heap_end = heap_start;
 
     /* Allocate and map initial heap pages */
@@ -198,10 +221,14 @@ void heap_init(void)
     memset((void *)heap_start, 0, HEAP_INITIAL_PAGES * PAGE_SIZE);
 
     /* Create initial free block spanning entire heap region */
-    free_list = (struct block_header *)heap_start;
-    free_list->size = HEAP_INITIAL_PAGES * PAGE_SIZE;
-    free_list->free = 1;
-    free_list->next = NULL;
+    {
+        struct block_header *initial = (struct block_header *)heap_start;
+        initial->size = HEAP_INITIAL_PAGES * PAGE_SIZE;
+        initial->free = 1;
+        initial->next = NULL;
+        initial->_padding = 0;
+        free_list = initial;
+    }
 
     printk(LOG_INFO, "HEAP: initialized %d KB at 0x%x-0x%x\n",
            (HEAP_INITIAL_PAGES * PAGE_SIZE) / 1024, heap_start, heap_end);
@@ -265,6 +292,11 @@ void *kmalloc(size_t size)
     void *result;
 
     if (size == 0) {
+        return NULL;
+    }
+
+    if (size > 0xFFFFFFFFU - (HEAP_ALIGNMENT - 1U) -
+               sizeof(struct block_header)) {
         return NULL;
     }
 

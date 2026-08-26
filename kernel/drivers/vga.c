@@ -26,9 +26,10 @@
  * VGA text buffer - physical 0xB8000, virtual 0xC00B8000
  *
  * After paging is enabled, we access VGA through the higher-half
- * mapping. Physical 0xB8000 is mapped to virtual P2V(0xB8000).
+ * mapping, reached through the checked direct-map conversion contract.
  */
-#define VGA_BUFFER ((volatile uint16_t *)P2V(0xB8000))
+static volatile uint16_t *vga_buffer;
+#define VGA_BUFFER vga_buffer
 
 /* Current cursor position */
 static int cursor_row = 0;
@@ -112,6 +113,12 @@ static void vga_scroll(void)
  */
 void vga_init(void)
 {
+    uint32_t vga_virt;
+
+    if (vmm_direct_phys_to_virt(0xB8000, &vga_virt) != 0) {
+        return;
+    }
+    vga_buffer = (volatile uint16_t *)vga_virt;
     /* Reset cursor to top-left */
     cursor_row = 0;
     cursor_col = 0;

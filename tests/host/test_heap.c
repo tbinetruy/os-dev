@@ -74,9 +74,10 @@ int vmm_map_page(uint32_t virt, uint32_t phys, uint32_t flags)
     return 0;
 }
 
-void vmm_unmap_page(uint32_t virt)
+int vmm_unmap_page(uint32_t virt)
 {
     (void)virt;
+    return 0;
 }
 
 uint32_t vmm_get_physaddr(uint32_t virt)
@@ -391,6 +392,25 @@ void test_oom_small_alloc_in_full_heap(void)
     }
 }
 
+void test_expand_rejects_heap_region_boundary_without_mutation(void)
+{
+    uint32_t old_end = heap_end;
+    uint32_t frames = mock_free_frames;
+
+    heap_end = KERNEL_HEAP_END_EXCLUSIVE - PAGE_SIZE;
+    TEST_ASSERT_EQUAL_INT(-ENOMEM, heap_expand(PAGE_SIZE * 2));
+    TEST_ASSERT_EQUAL_HEX32(KERNEL_HEAP_END_EXCLUSIVE - PAGE_SIZE, heap_end);
+    TEST_ASSERT_EQUAL_UINT32(frames, mock_free_frames);
+    heap_end = old_end;
+}
+
+void test_kmalloc_rejects_size_overflow(void)
+{
+    uint32_t frames = mock_free_frames;
+    TEST_ASSERT_NULL(kmalloc(0xFFFFFFFFU));
+    TEST_ASSERT_EQUAL_UINT32(frames, mock_free_frames);
+}
+
 /* ===== Safety Tests ===== */
 
 void test_kfree_invalid_pointer(void)
@@ -529,6 +549,8 @@ int main(void)
     RUN_TEST(test_oom_vmm_map_fails_rollback);
     RUN_TEST(test_heap_init_panics_on_pmm_failure);
     RUN_TEST(test_oom_small_alloc_in_full_heap);
+    RUN_TEST(test_expand_rejects_heap_region_boundary_without_mutation);
+    RUN_TEST(test_kmalloc_rejects_size_overflow);
 
     /* Safety */
     RUN_TEST(test_kfree_invalid_pointer);

@@ -74,6 +74,7 @@ void pmm_init(void)
     uint32_t count;
     uint32_t i;
     uint32_t f;
+    uint32_t mmap_virt;
 
     /* 1. Mark all frames as allocated initially (0xFF = all bits set) */
     memset(frame_bitmap, 0xFF, sizeof(frame_bitmap));
@@ -85,9 +86,13 @@ void pmm_init(void)
      *
      * boot_mmap_ptr contains the PHYSICAL address of the memory map
      * (at 0x504, set by stage2 bootloader). After paging is enabled,
-     * we must use P2V() to convert to virtual address for access.
+     * we use the checked low-physical direct-map conversion.
      */
-    mmap = (struct mmap_entry *)P2V(boot_mmap_ptr);
+    if (vmm_direct_phys_to_virt(boot_mmap_ptr, &mmap_virt) != 0) {
+        printk(LOG_ERROR, "PMM: memory map outside direct map\n");
+        return;
+    }
+    mmap = (struct mmap_entry *)mmap_virt;
     count = boot_mmap_count;
 
     if (count == 0) {

@@ -23,7 +23,7 @@
  * Test address in unmapped region above the kernel's direct-mapped area.
  * Must not conflict with any existing mapping.
  */
-#define TEST_FAULT_VADDR    0xD0000000
+#define TEST_FAULT_VADDR    0xE0001000
 
 /* Recorded fault info from test hook */
 static volatile uint32_t test_fault_addr;

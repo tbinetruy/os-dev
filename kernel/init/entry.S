@@ -247,7 +247,9 @@ _start:
     /*
      * Update stack pointer to higher-half address
      *
-     * The bootloader set ESP to 0x90000 (physical).
+     * The bootloader set ESP to 0x90000 (physical), the exclusive top of
+     * PID 0's downward-growing bootstrap stack. It has no enforced lower
+     * bound or guard and is never a normal kstack allocation.
      * We add KERNEL_VIRT_BASE to get the virtual address.
      * Note: The stack is in the first 4MB, so it's mapped.
      */
@@ -299,7 +301,7 @@ boot_page_directory:
  * Used by both identity mapping (PDE 0-3) and higher-half (PDE 768-771).
  *
  * This provides enough mapped memory for vmm_map_page() to allocate
- * page tables and access them via P2V() without page faults.
+ * early low-memory objects before VMM installs recursive page-table access.
  */
 .global boot_page_tables
 .align 4096

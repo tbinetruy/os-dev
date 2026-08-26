@@ -12,10 +12,10 @@
 #include <types.h>
 
 #ifndef PAGE_SIZE
-#define PAGE_SIZE 4096U
+#define PAGE_SIZE 4096
 #endif
 #ifndef PAGE_SHIFT
-#define PAGE_SHIFT 12U
+#define PAGE_SHIFT 12
 #endif
 #ifndef PAGE_MASK
 #define PAGE_MASK (~(PAGE_SIZE - 1U))

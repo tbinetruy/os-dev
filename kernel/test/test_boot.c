@@ -63,11 +63,15 @@ static void test_a20_enabled(void)
      * Write a value to address 0x100000 (1MB) and verify it doesn't
      * appear at address 0x000000 (which would indicate wrapping).
      *
-     * After Story 3.2, we must use P2V() to access physical addresses
+     * Use checked direct-map conversions to access low physical addresses.
      * since the identity mapping has been removed.
      */
-    volatile uint32_t *addr_low = (volatile uint32_t *)P2V(0x000500);
-    volatile uint32_t *addr_high = (volatile uint32_t *)P2V(0x100500);
+    uint32_t addr_low_virt;
+    uint32_t addr_high_virt;
+    vmm_direct_phys_to_virt(0x000500, &addr_low_virt);
+    vmm_direct_phys_to_virt(0x100500, &addr_high_virt);
+    volatile uint32_t *addr_low = (volatile uint32_t *)addr_low_virt;
+    volatile uint32_t *addr_high = (volatile uint32_t *)addr_high_virt;
 
     uint32_t saved_low = *addr_low;
     uint32_t saved_high = *addr_high;

@@ -60,7 +60,7 @@ KERNEL_SRCS_vmm_layout = ../kernel/mm/vmm_layout.c
 # Pointer-width warnings are suppressed since the kernel uses uint32_t
 # for addresses (safe when addresses fit in 32 bits).
 CFLAGS_heap  = -Wno-pedantic -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -fno-pie
-LDFLAGS_heap = -no-pie -Wl,--defsym,_kernel_end=heap_buf
+LDFLAGS_heap = -no-pie -Wl,--defsym,__kernel_heap_start=0xC1000000
 
 # Colors for output (optional, disable with NO_COLOR=1)
 ifndef NO_COLOR

@@ -39,7 +39,7 @@
  * Linker-provided symbol marking end of kernel image (VIRTUAL address)
  *
  * After Story 3.2, _kernel_end is a virtual address (0xC0XXXXXX).
- * Use V2P() to convert to physical address for frame calculations.
+ * PMM addresses are physical; map them explicitly before dereferencing.
  */
 extern char _kernel_end;
 

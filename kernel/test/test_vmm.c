@@ -17,6 +17,7 @@
 #include <pmm.h>
 #include <asm.h>
 #include <printk.h>
+#include <errno.h>
 
 /*
  * test_vmm - Run all VMM tests
@@ -68,9 +69,29 @@ void test_vmm(void)
      * We use 0xD0000000 which is above the kernel but below 0xFFFFFFFF.
      * This region is not mapped by the boot page tables.
      */
-    uint32_t test_virt = 0xD0000000;
+    uint32_t test_virt = KERNEL_DYNAMIC_START;
     int ret = vmm_map_page(test_virt, test_phys, PAGE_PRESENT | PAGE_WRITABLE);
     TEST_ASSERT_MSG(ret == 0, "vmm_map_page should succeed");
+    TEST_ASSERT_MSG(vmm_map_page(test_virt, test_phys + PAGE_SIZE,
+                                 PAGE_KERNEL) == -EEXIST,
+                    "occupied mapping is preserved");
+    TEST_ASSERT_MSG(vmm_get_physaddr(test_virt) == test_phys,
+                    "collision leaves original frame");
+    TEST_ASSERT_MSG(vmm_map_page(test_virt + 1, test_phys, PAGE_KERNEL) ==
+                    -EINVAL, "unaligned virtual address rejected");
+    TEST_ASSERT_MSG(vmm_map_page(KERNEL_RESERVED_START, test_phys,
+                                 PAGE_KERNEL) == -EINVAL,
+                    "reserved region rejected");
+    TEST_ASSERT_MSG(vmm_map_page(RECURSIVE_START, test_phys,
+                                 PAGE_KERNEL) == -EINVAL,
+                    "recursive region rejected");
+    TEST_ASSERT_MSG((((uint32_t *)RECURSIVE_PD_VADDR)
+                     [RECURSIVE_PDE_INDEX] & PAGE_FRAME_MASK) ==
+                    (read_cr3() & PAGE_FRAME_MASK),
+                    "recursive PDE points to CR3");
+    TEST_ASSERT_MSG((((uint32_t *)RECURSIVE_PD_VADDR)
+                     [RECURSIVE_PDE_INDEX] & PAGE_USER) == 0,
+                    "recursive PDE is supervisor-only");
 
     if (ret != 0) {
         /* Can't continue if mapping failed */
@@ -130,21 +151,25 @@ void test_vmm(void)
      * VGA buffer at 0xB8000 should be mapped (either identity mapped
      * or through P2V). We test by reading a known pattern.
      *
-     * After higher-half setup, VGA is at P2V(0xB8000) = 0xC00B8000.
+     * After higher-half setup, VGA is in the checked direct-map window.
      */
-    volatile uint16_t *vga = (volatile uint16_t *)P2V(0xB8000);
+    uint32_t vga_virt;
+    vmm_direct_phys_to_virt(0xB8000, &vga_virt);
+    volatile uint16_t *vga = (volatile uint16_t *)vga_virt;
     /* Verify we can read without faulting and VGA has content */
     uint16_t vga_val = *vga;
-    TEST_ASSERT_MSG(vga_val != 0, "VGA memory accessible at P2V(0xB8000)");
+    TEST_ASSERT_MSG(vga_val != 0, "VGA memory accessible through direct map");
 
     /*
      * Test 11: P2V/V2P macro consistency
      */
     uint32_t test_addr = 0x00200000;
-    TEST_ASSERT_MSG(V2P(P2V(test_addr)) == test_addr,
-                    "V2P(P2V(x)) should equal x");
-    TEST_ASSERT_MSG(P2V(V2P(KERNEL_BASE + test_addr)) == KERNEL_BASE + test_addr,
-                    "P2V(V2P(x)) should equal x for kernel addresses");
+    uint32_t converted;
+    uint32_t round_trip;
+    TEST_ASSERT_MSG(vmm_direct_phys_to_virt(test_addr, &converted) == 0,
+                    "bounded physical conversion succeeds");
+    TEST_ASSERT_MSG(vmm_direct_virt_to_phys(converted, &round_trip) == 0 &&
+                    round_trip == test_addr, "bounded conversion round trip");
 
     /*
      * Cleanup: Free the test frame

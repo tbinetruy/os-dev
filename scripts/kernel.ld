@@ -24,6 +24,7 @@ ENTRY(_start)
 KERNEL_VIRT_BASE = 0xC0000000;      /* Virtual base (3GB) */
 KERNEL_PHYS_BASE = 0x00100000;      /* Physical base (1MB) */
 KERNEL_VIRT_START = 0xC0100000;     /* Virtual load address */
+__kernel_heap_start = 0xC1000000;
 
 SECTIONS
 {
@@ -101,6 +102,9 @@ SECTIONS
 
     _kernel_virt_end = .;
     _kernel_end = .;
+
+    ASSERT(_kernel_virt_end <= __kernel_heap_start,
+           "kernel image overlaps fixed heap start at 0xC1000000")
 
     /*
      * Physical end address (for memory manager)

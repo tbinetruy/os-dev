@@ -68,6 +68,7 @@ extern void test_fault(void);
 
 /* Story 3.4: Kernel Heap Allocator */
 extern void test_heap(void);
+extern void test_kstack(void);
 
 /* Milestone 5-6: Process Management */
 /* extern void test_sched(void); */
@@ -176,6 +177,7 @@ void test_run_all(void)
 
     /* Story 3.4: Kernel Heap Allocator */
     test_heap();
+    test_kstack();
 
     /* Milestone 5-6: Processes */
     /* test_sched(); */

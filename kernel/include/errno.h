@@ -11,6 +11,7 @@
 #define KERNEL_INCLUDE_ERRNO_H
 
 #define ENOMEM  12      /* Out of memory */
+#define EEXIST  17      /* File or mapping already exists */
 #define EINVAL  22      /* Invalid argument */
 #define EFAULT  14      /* Bad address */
 

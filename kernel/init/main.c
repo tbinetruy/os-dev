@@ -149,7 +149,7 @@ void kmain(void)
     /*
      * Initialize Kernel Heap Allocator (Story 3.4)
      *
-     * Maps initial heap pages after _kernel_end and sets up the
+     * Maps initial heap pages at KERNEL_HEAP_START and sets up the
      * free list. After this, kmalloc()/kfree() are available.
      */
     heap_init();
