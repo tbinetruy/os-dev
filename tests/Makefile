@@ -42,6 +42,7 @@ TEST_BINS = $(patsubst host/test_%.c,test_%,$(TEST_SRCS))
 
 KERNEL_SRCS_gdt = ../kernel/init/gdt.c
 KERNEL_SRCS_format = ../kernel/lib/format.c
+KERNEL_SRCS_vmm_layout = ../kernel/mm/vmm_layout.c
 
 # =============================================================================
 # Per-Test Compiler/Linker Flags

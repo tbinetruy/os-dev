@@ -1,6 +1,7 @@
 #include "unity/unity.h"
 
 #include <vmm.h>
+#include <errno.h>
 
 void setUp(void)
 {
@@ -60,11 +61,42 @@ void test_recursive_and_stack_geometry(void)
     TEST_ASSERT_EQUAL_UINT32(1536, KSTACK_SLOT_COUNT);
 }
 
+void test_direct_map_checked_boundaries(void)
+{
+    uint32_t output = 0xA5A5A5A5;
+
+    TEST_ASSERT_EQUAL_INT(0, vmm_direct_phys_to_virt(0, &output));
+    TEST_ASSERT_EQUAL_HEX32(DIRECT_MAP_START, output);
+    TEST_ASSERT_EQUAL_INT(0, vmm_direct_phys_to_virt(0x00FFFFFF, &output));
+    TEST_ASSERT_EQUAL_HEX32(DIRECT_MAP_LAST, output);
+    output = 0xA5A5A5A5;
+    TEST_ASSERT_EQUAL_INT(-EINVAL,
+                          vmm_direct_phys_to_virt(DIRECT_MAP_PHYS_LIMIT,
+                                                  &output));
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5, output);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, vmm_direct_phys_to_virt(0, NULL));
+
+    TEST_ASSERT_EQUAL_INT(0,
+                          vmm_direct_virt_to_phys(DIRECT_MAP_START, &output));
+    TEST_ASSERT_EQUAL_HEX32(0, output);
+    TEST_ASSERT_EQUAL_INT(0,
+                          vmm_direct_virt_to_phys(DIRECT_MAP_LAST, &output));
+    TEST_ASSERT_EQUAL_HEX32(0x00FFFFFF, output);
+    output = 0xA5A5A5A5;
+    TEST_ASSERT_EQUAL_INT(-EINVAL,
+                          vmm_direct_virt_to_phys(DIRECT_MAP_END_EXCLUSIVE,
+                                                  &output));
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5, output);
+    TEST_ASSERT_EQUAL_INT(-EINVAL,
+                          vmm_direct_virt_to_phys(DIRECT_MAP_START, NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_layout_exact_half_open_boundaries);
     RUN_TEST(test_layout_is_adjacent_and_page_aligned);
     RUN_TEST(test_recursive_and_stack_geometry);
+    RUN_TEST(test_direct_map_checked_boundaries);
     return UNITY_END();
 }
