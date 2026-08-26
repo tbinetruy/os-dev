@@ -1,6 +1,6 @@
 # Story 3.5: Kernel Virtual Address Space Layout & Dynamic Mapping Regions
 
-Status: in-progress
+Status: review
 
 <!-- Approved corrective story. Implement and review before Story 4.1 resumes. -->
 
@@ -180,139 +180,139 @@ silently collide as the kernel grows.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Establish the canonical layout contract** (AC: #1, #2, #7)
-  - [ ] 1.1 Extend `kernel/include/vmm.h` (or a VMM-owned header included by
+- [x] **Task 1: Establish the canonical layout contract** (AC: #1, #2, #7)
+  - [x] 1.1 Extend `kernel/include/vmm.h` (or a VMM-owned header included by
     it) with named starts, exclusive ends/sizes, PDE indices, recursive
     formulas, direct-map physical limit, and stack-slot geometry.
-  - [ ] 1.2 Use half-open ranges internally; avoid a 32-bit
+  - [x] 1.2 Use half-open ranges internally; avoid a 32-bit
     `RECURSIVE_END_EXCLUSIVE` value that wraps to zero.
-  - [ ] 1.3 Replace the obsolete flat-layout diagram and document owner,
+  - [x] 1.3 Replace the obsolete flat-layout diagram and document owner,
     allowed allocator, and mapping policy for every region.
-  - [ ] 1.4 Replace raw conversion macros with
+  - [x] 1.4 Replace raw conversion macros with
     `vmm_direct_phys_to_virt()` / `vmm_direct_virt_to_phys()` using the exact
     AC2 signatures and `-EINVAL` behavior; update only legitimate bounded users.
-  - [ ] 1.5 Define `KSTACK_GUARD_PAGES = 1`, `KSTACK_PAGES = 1`, and derive
+  - [x] 1.5 Define `KSTACK_GUARD_PAGES = 1`, `KSTACK_PAGES = 1`, and derive
     `KSTACK_SLOT_PAGES`, `KSTACK_SLOT_SIZE`, and `KSTACK_SLOT_COUNT`; add
     compile-time or host-testable assertions that the current policy yields
     1536 slots and that stacks use PDE indices 1020-1022 while PDE 1023 remains
     recursive.
 
-- [ ] **Task 2: Install and adopt recursive paging** (AC: #3, #5)
-  - [ ] 2.1 In `vmm_init()`, use the still-direct-mapped `boot_page_directory`
+- [x] **Task 2: Install and adopt recursive paging** (AC: #3, #5)
+  - [x] 2.1 In `vmm_init()`, use the still-direct-mapped `boot_page_directory`
     to install PDE 1023 against the active CR3 physical frame, reload CR3, and
     only then adopt recursive aliases. No `entry.S` bootstrap implementation is
     required beyond keeping its comments consistent.
-  - [ ] 2.2 Add documented helpers for current page directory and current page
+  - [x] 2.2 Add documented helpers for current page directory and current page
     table aliases using `0xFFFFF000` and `0xFFC00000 + index * 4096`.
-  - [ ] 2.3 Refactor `kernel/mm/vmm.c` so existing and newly created tables are
+  - [x] 2.3 Refactor `kernel/mm/vmm.c` so existing and newly created tables are
     accessed only through recursive aliases after initialization.
-  - [ ] 2.4 For a missing PDE: allocate a frame, publish the supervisor PDE,
+  - [x] 2.4 For a missing PDE: allocate a frame, publish the supervisor PDE,
     invalidate the recursive-table alias, zero all 4096 bytes through that
     alias, then operate on the target PTE.
-  - [ ] 2.5 Make `vmm_map_page()` return `-EINVAL` for unaligned addresses and
+  - [x] 2.5 Make `vmm_map_page()` return `-EINVAL` for unaligned addresses and
     `-EEXIST` for a present PTE, without mutation; add `EEXIST` to `errno.h`.
-  - [ ] 2.6 Change `vmm_unmap_page()` to return `int`, preserve its unmap-only
+  - [x] 2.6 Change `vmm_unmap_page()` to return `int`, preserve its unmap-only
     ownership and precise TLB invalidation, and retain
     `vmm_get_physaddr()` offset behavior.
-  - [ ] 2.7 Reject ordinary map/unmap requests in reserved expansion and
+  - [x] 2.7 Reject ordinary map/unmap requests in reserved expansion and
     recursive ranges with `-EINVAL`; keep PDE 1023 mutation private to recursive
     self-map setup and test `0xF0000000`, `0xFFC00000`, `0xFFFFF000` boundaries.
 
-- [ ] **Task 3: Move and bound the heap** (AC: #1, #4)
-  - [ ] 3.1 Change `heap_init()` to start exactly at `KERNEL_HEAP_START`
+- [x] **Task 3: Move and bound the heap** (AC: #1, #4)
+  - [x] 3.1 Change `heap_init()` to start exactly at `KERNEL_HEAP_START`
     (`0xC1000000`) and verify the destination pages are initially unmapped.
-  - [ ] 3.2 Export `__kernel_heap_start = 0xC1000000` and add a linker `ASSERT`
+  - [x] 3.2 Export `__kernel_heap_start = 0xC1000000` and add a linker `ASSERT`
     proving `_kernel_virt_end <= __kernel_heap_start`; at runtime verify the
     linker symbol equals the production C `KERNEL_HEAP_START` constant.
-  - [ ] 3.3 Preflight expansion page count and address arithmetic so no request
+  - [x] 3.3 Preflight expansion page count and address arithmetic so no request
     wraps or reaches `KERNEL_HEAP_END_EXCLUSIVE`.
-  - [ ] 3.4 Keep `free_list` and the initialized state unpublished until all
+  - [x] 3.4 Keep `free_list` and the initialized state unpublished until all
     initial mappings succeed; on failure, log the operation/address and panic
     without adding rollback work. Preserve the transactional later-expansion
     cleanup because those failures return to a running kernel.
-  - [ ] 3.5 Update heap diagnostics/tests to assert the fixed region while
+  - [x] 3.5 Update heap diagnostics/tests to assert the fixed region while
     retaining first-fit, alignment, splitting, coalescing, and `kmalloc(0)`
     semantics.
 
-- [ ] **Task 4: Add the kernel-stack region allocator** (AC: #6, #7)
-  - [ ] 4.1 Add `struct kstack` and the exact `kstack_alloc()` / `kstack_free()`
+- [x] **Task 4: Add the kernel-stack region allocator** (AC: #6, #7)
+  - [x] 4.1 Add `struct kstack` and the exact `kstack_alloc()` / `kstack_free()`
     signatures from AC6 in `kernel/include/kstack.h`, with implementation in
     `kernel/mm/kstack.c`; keep process policy out of this module.
-  - [ ] 4.2 Track the derived fixed-size slots with a bounded bitmap or
+  - [x] 4.2 Track the derived fixed-size slots with a bounded bitmap or
     equivalent static metadata; size it from `KSTACK_SLOT_COUNT`, not a
     duplicate `1536` literal, and do not allocate the metadata from the heap.
-  - [ ] 4.3 Allocate guard/stack virtual addresses from slot index, confirm both
+  - [x] 4.3 Allocate guard/stack virtual addresses from slot index, confirm both
     are non-present, allocate one PMM frame, map only the upper page, and return
     top-of-stack plus any handle/address required for teardown.
-  - [ ] 4.4 On every failure edge, unwind in reverse order; never mark a slot
+  - [x] 4.4 On every failure edge, unwind in reverse order; never mark a slot
     allocated until the mapping transaction can be committed, and zero the
     caller's three output fields on allocation failure.
-  - [ ] 4.5 On free, validate exact slot ownership before mutation, capture the
+  - [x] 4.5 On free, validate exact slot ownership before mutation, capture the
     physical frame before unmapping, then unmap/free/release exactly once and
     clear the caller's three fields after successful free.
-  - [ ] 4.6 Document that `0xC0090000` is PID 0's exclusive initial stack top,
+  - [x] 4.6 Document that `0xC0090000` is PID 0's exclusive initial stack top,
     not a stack base; state that it grows downward without an enforced bound or
     guard and is never accepted by `kstack_free()`.
 
-- [ ] **Task 5: Update boot and integration assumptions** (AC: #2, #5, #7)
-  - [ ] 5.1 Keep the existing 16 MiB low physical mapping in `entry.S`; install
+- [x] **Task 5: Update boot and integration assumptions** (AC: #2, #5, #7)
+  - [x] 5.1 Keep the existing 16 MiB low physical mapping in `entry.S`; install
     the recursive PDE in `vmm_init()` without broadening direct-map semantics.
-  - [ ] 5.2 Reconcile comments in `kernel/init/entry.S`, `kernel/mm/vmm.c`,
+  - [x] 5.2 Reconcile comments in `kernel/init/entry.S`, `kernel/mm/vmm.c`,
     `kernel/include/vmm.h`, `kernel/mm/heap.c`, and `kernel/init/main.c` with
     the new ownership contract.
-  - [ ] 5.3 Initialize VMM/recursive access before heap and stack allocators;
+  - [x] 5.3 Initialize VMM/recursive access before heap and stack allocators;
     stack allocation need not be consumed by process code until Story 4.1.
-  - [ ] 5.4 Audit all repository `P2V`/`V2P` call sites. Preserve VGA, E820,
+  - [x] 5.4 Audit all repository `P2V`/`V2P` call sites. Preserve VGA, E820,
     boot page-directory, and linker-symbol uses only where their addresses are
     provably inside the direct map.
-  - [ ] 5.5 Add a clear build-time size check that rejects Story 3.5
+  - [x] 5.5 Add a clear build-time size check that rejects Story 3.5
     `kernel.bin` above the bootloader's current effective 64 KiB copy capacity.
     Do not change loader constants or claim support above 64 KiB; robust
     larger-kernel/CHS loading is a separate corrective boot story.
 
-- [ ] **Task 6: Add focused host-side verification** (AC: #1-#6, #8)
-  - [ ] 6.1 Add pure layout/slot-index tests under `tests/host/` and register any
+- [x] **Task 6: Add focused host-side verification** (AC: #1-#6, #8)
+  - [x] 6.1 Add pure layout/slot-index tests under `tests/host/` and register any
     kernel-linked source/flags in `tests/Makefile`.
-  - [ ] 6.2 Add a `HOST_TEST`-only backing-base seam so heap algorithms
+  - [x] 6.2 Add a `HOST_TEST`-only backing-base seam so heap algorithms
     dereference a real host buffer while production always uses the immutable
     `KERNEL_HEAP_START`; extend heap mocks for upper-bound rejection, an
     initial-init failure that panics before publishing usable heap state, map
     collision, PMM failure, and integer overflow/oversize requests. A host test
     that catches panic must reset its own mock state; production cleanup is not
     part of the boot-failure contract.
-  - [ ] 6.3 Test stack first/last slot, full exhaustion, reuse, guard presence,
+  - [x] 6.3 Test stack first/last slot, full exhaustion, reuse, guard presence,
     invalid/double free, PMM failure, map failure, and exact rollback counts.
-  - [ ] 6.4 Test recursive index/address formulas and bounded conversion helpers
+  - [x] 6.4 Test recursive index/address formulas and bounded conversion helpers
     without dereferencing kernel virtual addresses on the host; keep separate
     pure layout tests asserting production `KERNEL_HEAP_START`.
 
-- [ ] **Task 7: Add in-kernel VMM and stack integration tests** (AC: #2-#8)
-  - [ ] 7.1 Extend `kernel/test/test_vmm.c` for PDE 1023, page directory alias,
+- [x] **Task 7: Add in-kernel VMM and stack integration tests** (AC: #2-#8)
+  - [x] 7.1 Extend `kernel/test/test_vmm.c` for PDE 1023, page directory alias,
     page-table aliases, supervisor flags, collision preservation, and recursive
     map/unmap/translation.
-  - [ ] 7.2 Replace both current heap-owned `0xD0000000` ad hoc addresses:
+  - [x] 7.2 Replace both current heap-owned `0xD0000000` ad hoc addresses:
     `test_vmm.c` uses dynamic test page `0xE0000000`, and `test_fault.c` uses
     distinct page `0xE0001000`; each test unmaps and frees its page/frame.
-  - [ ] 7.3 Add `kernel/test/test_kstack.c` and register it in
+  - [x] 7.3 Add `kernel/test/test_kstack.c` and register it in
     `kernel/test/test_runner.c`; verify guard-page non-presence without causing
     an unrecoverable fault unless using the existing recoverable PF test hook.
-  - [ ] 7.4 Add deterministic failure injection under `TEST_MODE` where needed
+  - [x] 7.4 Add deterministic failure injection under `TEST_MODE` where needed
     to force PMM to return a real available frame reserved by the fixture above
     16 MiB and each rollback edge; never fabricate a physical address or
     destructively exhaust the live PMM.
-  - [ ] 7.5 Re-run existing PMM, page-fault, heap, VGA, boot, and host suites to
+  - [x] 7.5 Re-run existing PMM, page-fault, heap, VGA, boot, and host suites to
     prove no ownership or direct-map regression.
 
-- [ ] **Task 8: Build and runtime verification** (AC: #4, #5, #8)
-  - [ ] 8.1 Run `make clean && make` and confirm linker boundary checks pass.
-  - [ ] 8.2 Confirm the build rejects a `kernel.bin` larger than 65536 bytes with
+- [x] **Task 8: Build and runtime verification** (AC: #4, #5, #8)
+  - [x] 8.1 Run `make clean && make` and confirm linker boundary checks pass.
+  - [x] 8.2 Confirm the build rejects a `kernel.bin` larger than 65536 bytes with
     a clear message before producing a misleading boot image.
-  - [ ] 8.3 Run `make host-test` and record suite totals.
-  - [ ] 8.4 Run `make test`; confirm all suites finish with zero failures and
+  - [x] 8.3 Run `make host-test` and record suite totals.
+  - [x] 8.4 Run `make test`; confirm all suites finish with zero failures and
     no leaked frames/slots after injected failures.
-  - [ ] 8.5 Run normal `make qemu`; confirm serial/VGA initialization, heap at
+  - [x] 8.5 Run normal `make qemu`; confirm serial/VGA initialization, heap at
     `0xC1000000`, recursive VMM initialization, and `Boot complete`.
-  - [ ] 8.6 Inspect the linked ELF/map (`readelf`/`nm`/`objdump` as appropriate)
+  - [x] 8.6 Inspect the linked ELF/map (`readelf`/`nm`/`objdump` as appropriate)
     to prove kernel end, page-aligned paging objects, and region symbols.
 
 ## Dev Notes
@@ -529,13 +529,61 @@ No `kernel/proc/` source should be created or changed in Story 3.5.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Codex (GPT-5)
 
 ### Debug Log References
+
+- RED `77f5363`: layout test compilation failed on missing canonical constants.
+- GREEN `dd5a51f`: 3/3 canonical layout tests passed.
+- RED `8fb0856`: bounded conversion suite failed on missing production module.
+- GREEN `874233f`: 4/4 layout/conversion tests passed.
+- GREEN `06eb76d`, `5897c73`: recursive VMM, heap, stack, rollback,
+  high-frame, build-limit, and MMU integration verification passed.
 
 ### Completion Notes List
 
 - Ultimate context engine analysis completed - comprehensive developer guide
   created.
+- Implemented the canonical owned virtual layout, checked direct-map APIs,
+  recursive PDE 1023 access, collision-safe map/unmap semantics, fixed bounded
+  heap, and transactional one-page guarded kernel-stack slots.
+- Audited retained direct-map users and moved VMM/page-table paths entirely to
+  recursive aliases; dynamic VMM/fault tests now own 0xE0000000/0xE0001000.
+- Verified clean cross-build, 86 host tests, 580 in-kernel tests, normal QEMU
+  boot through `Boot complete`, kernel-size rejection, and linked layout.
+- Bare-metal coverage percentage is unavailable; explicit AC-to-host/MMU/boot
+  evidence substitutes for a line-coverage percentage.
 
 ### File List
+
+- Makefile
+- _bmad-output/implementation-artifacts/3-5-kernel-virtual-address-space-layout-dynamic-mapping-regions.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- kernel/drivers/vga.c
+- kernel/include/errno.h
+- kernel/include/kstack.h
+- kernel/include/pmm.h
+- kernel/include/vmm.h
+- kernel/init/entry.S
+- kernel/init/main.c
+- kernel/mm/heap.c
+- kernel/mm/kstack.c
+- kernel/mm/pmm.c
+- kernel/mm/vmm.c
+- kernel/mm/vmm_layout.c
+- kernel/test/test_boot.c
+- kernel/test/test_fault.c
+- kernel/test/test_kstack.c
+- kernel/test/test_runner.c
+- kernel/test/test_vga.c
+- kernel/test/test_vmm.c
+- scripts/kernel.ld
+- tests/Makefile
+- tests/host/test_heap.c
+- tests/host/test_kstack.c
+- tests/host/test_vmm_layout.c
+
+## Change Log
+
+- 2026-08-26: Implemented and verified Story 3.5 kernel virtual-memory
+  ownership, recursive paging, bounded heap, guarded stacks, and build guard.

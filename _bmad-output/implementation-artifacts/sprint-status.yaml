@@ -63,7 +63,7 @@ development_status:
   3-2-paging-virtual-memory: done
   3-3-page-fault-handler: done
   3-4-kernel-heap-allocator: done
-  3-5-kernel-virtual-address-space-layout-dynamic-mapping-regions: in-progress
+  3-5-kernel-virtual-address-space-layout-dynamic-mapping-regions: review
   # Historical retrospective remains done; corrective addendum is pending.
   epic-3-retrospective: done
 

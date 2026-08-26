@@ -141,11 +141,32 @@ void test_exhaustion_last_slot_and_invalid_double_free(void)
     TEST_ASSERT_EQUAL_INT(-EINVAL, kstack_free(NULL));
 }
 
+void test_invalid_guard_and_misaligned_free_preserve_state(void)
+{
+    struct kstack stack;
+    struct kstack invalid;
+    uint32_t slots;
+
+    TEST_ASSERT_EQUAL_INT(0, kstack_alloc(&stack));
+    slots = kstack_free_count();
+    invalid = stack;
+    invalid.guard_base += PAGE_SIZE;
+    TEST_ASSERT_EQUAL_INT(-EINVAL, kstack_free(&invalid));
+    invalid = stack;
+    invalid.stack_base = invalid.guard_base;
+    TEST_ASSERT_EQUAL_INT(-EINVAL, kstack_free(&invalid));
+    invalid.guard_base = KERNEL_STACK_END_EXCLUSIVE;
+    TEST_ASSERT_EQUAL_INT(-EINVAL, kstack_free(&invalid));
+    TEST_ASSERT_EQUAL_UINT32(slots, kstack_free_count());
+    TEST_ASSERT_EQUAL_INT(0, kstack_free(&stack));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_first_slot_guard_map_free_and_reuse);
     RUN_TEST(test_failures_rollback_and_zero_output);
     RUN_TEST(test_exhaustion_last_slot_and_invalid_double_free);
+    RUN_TEST(test_invalid_guard_and_misaligned_free_preserve_state);
     return UNITY_END();
 }

@@ -93,6 +93,10 @@ void test_vmm(void)
     TEST_ASSERT_MSG(vmm_map_page(RECURSIVE_START, test_phys,
                                  PAGE_KERNEL) == -EINVAL,
                     "recursive region rejected");
+    TEST_ASSERT_MSG(vmm_unmap_page(KERNEL_RESERVED_START) == -EINVAL,
+                    "reserved unmap rejected");
+    TEST_ASSERT_MSG(vmm_unmap_page(RECURSIVE_PD_VADDR) == -EINVAL,
+                    "page-directory alias unmap rejected");
     TEST_ASSERT_MSG((((uint32_t *)RECURSIVE_PD_VADDR)
                      [RECURSIVE_PDE_INDEX] & PAGE_FRAME_MASK) ==
                     (read_cr3() & PAGE_FRAME_MASK),
