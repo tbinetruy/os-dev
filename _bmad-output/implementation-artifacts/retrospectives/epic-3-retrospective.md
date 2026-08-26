@@ -197,3 +197,66 @@ Retrospective completed and findings documented.
 
 - Sprint status updated: `epic-3: done`, `epic-3-retrospective: done`
 - Ready to proceed with Epic 4: Kernel Threads & Scheduling
+
+---
+
+## Corrective Addendum — 2026-08-26
+
+This addendum preserves the original retrospective as an accurate record of
+what was understood on 2026-02-10. Epic 3 was subsequently reopened after the
+Story 4.1 review exposed a missing virtual-memory ownership design.
+
+### Trigger and Evidence
+
+The in-progress thread-creation work derived a stack virtual address with
+`P2V(pmm_alloc_frame())`. That is unsafe because the current direct map covers
+only physical `0-16 MiB`, while PMM may return frames above it. It also gives
+kernel stacks virtual addresses in the same upward-growing area previously used
+by the heap, so later heap expansion can replace a live stack mapping.
+
+The review also established that:
+
+- kernel virtual space had no explicit regions or owners;
+- the heap had no fixed virtual range or upper bound;
+- page-table access depended on new PMM frames happening to be direct-mapped;
+- ordinary page mapping could silently replace an existing mapping; and
+- the PID 0 bootstrap stack has an initial top at virtual `0xC0090000`, but no
+  enforced lower bound or guard page.
+
+### Corrective Decision
+
+Add Story 3.5, **Kernel Virtual Address Space Layout & Dynamic Mapping
+Regions**, to Epic 3 and complete it before resuming Story 4.1. Story 3.5 owns:
+
+- explicit, non-overlapping kernel virtual regions;
+- bounded direct-map conversion helpers;
+- recursive current-page-table access;
+- a fixed and bounded kernel heap;
+- non-overwriting map semantics;
+- dedicated guarded kernel-stack slots; and
+- boundary, failure, rollback, and boot-compatibility tests.
+
+Story 4.1 remains valid but depends on the guarded stack allocator instead of
+choosing virtual stack addresses itself. Migration of PID 0 from its unbounded
+bootstrap stack is tracked separately in `BACKLOG.md`.
+
+### Correction to Earlier Action Items
+
+The earlier recommendation to raise `KERNEL_SECTORS` directly to 512 was
+incomplete. Stage 2 copies only 64 KiB and its current disk-reading assumptions
+do not establish support for a 512-sector kernel. Story 3.5 therefore adds a
+clear 64 KiB build-time limit; robust larger-kernel loading requires a separate
+bootloader correction rather than another constant-only increase.
+
+### Updated Readiness
+
+| Area | Updated Status |
+|------|----------------|
+| Stories 3.1-3.4 | Done; historical implementations retained |
+| Story 3.5 | Ready for development |
+| Epic 3 | Reopened and in progress |
+| Story 4.1 | Paused in a preserved WIP branch until Story 3.5 is done |
+| Epic 3 retrospective | Original retrospective done; this corrective addendum records the reopened scope |
+
+**Revised conclusion:** Epic 3 is not ready to hand off to scheduling until
+Story 3.5 is implemented, tested, and independently reviewed.

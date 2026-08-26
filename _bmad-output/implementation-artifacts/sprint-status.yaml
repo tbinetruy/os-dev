@@ -1,4 +1,4 @@
-# generated: 2026-01-13
+# generated: 2026-08-25
 # project: os-dev
 # project_key: os-dev
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-01-13
+generated: 2026-08-25
 project: os-dev
 project_key: os-dev
 tracking_system: file-system
@@ -58,11 +58,13 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Memory Management
-  epic-3: done
+  epic-3: in-progress
   3-1-physical-memory-manager: done
   3-2-paging-virtual-memory: done
   3-3-page-fault-handler: done
   3-4-kernel-heap-allocator: done
+  3-5-kernel-virtual-address-space-layout-dynamic-mapping-regions: ready-for-dev
+  # Historical retrospective remains done; corrective addendum is pending.
   epic-3-retrospective: done
 
   # Epic 4: Kernel Threads & Scheduling

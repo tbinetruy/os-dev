@@ -2,6 +2,7 @@
 project_name: 'os-dev'
 user_name: 'Thomas'
 date: '2026-01-12'
+last_updated: '2026-08-25'
 sections_completed: ['technology_stack', 'c_rules', 'assembly_rules', 'memory_rules', 'testing_rules', 'logging_rules', 'critical_donts', 'build_commands']
 source_document: '_bmad-output/planning-artifacts/architecture.md'
 ---
@@ -82,14 +83,35 @@ Every assembly function MUST document:
 - No `memcpy`/`memset` until kernel lib is written
 
 **Memory Layout:**
-- Kernel space: 0xC0000000 and above
 - User space: 0x00000000 to 0xBFFFFFFF
-- Kernel stack: allocated per-process
+- Kernel space starts at 0xC0000000 but is split into owned regions
+- Low physical direct map: 0xC0000000 to 0xC0FFFFFF maps physical 0 to 16MiB
+- Kernel heap starts at 0xC1000000 and must stay inside its documented range
+- Kernel stacks use dedicated virtual slots near 0xFF000000 with unmapped
+  guard pages
+- Recursive page-table window: 0xFFC00000 to 0xFFFFFFFF, page directory at
+  0xFFFFF000
+- PID 0 initially uses the bootloader stack at physical 0x90000, virtual
+  0xC0090000
 
 **Page Management:**
 - PAGE_SIZE = 4096 bytes
 - Use bitmap allocator for physical frames
 - All page tables must be page-aligned
+- Do not use P2V/V2P as arbitrary address conversion; they only apply to the
+  bounded direct-map window
+- Page-table memory should be accessed through the recursive mapping once
+  Story 3.5 is implemented
+- Dynamic kernel memory must first reserve virtual space from the correct
+  region, then map a PMM frame into that virtual page
+- Define region boundaries once in a VMM-owned header; do not duplicate raw
+  address literals across subsystems
+- Normal page mapping must reject an already-present destination; any
+  intentional replacement uses a distinct explicit operation
+- Kernel-stack slots contain an unmapped guard page below the mapped page and
+  must be returned to the stack-region allocator on teardown
+- On failure, unwind every mapping, PMM frame, and virtual slot acquired by
+  that operation
 
 ---
 
@@ -133,6 +155,9 @@ printk(LOG_INFO, "PMM: %d pages free\n", free_count);
 - Call user-space functions from kernel
 - Dereference user pointers without validation
 - Assume interrupts are enabled/disabled
+- Use `P2V(pmm_alloc_frame())` as a kernel stack address
+- Let heap growth and kernel-stack mappings share the same virtual range
+- Replace an existing page mapping unless the caller explicitly owns remapping
 - Use `goto` except for error cleanup
 - Allocate large arrays on stack (kernel stack is small)
 
@@ -142,6 +167,7 @@ printk(LOG_INFO, "PMM: %d pages free\n", free_count);
 - Use `volatile` for hardware registers
 - Document any inline assembly with clobber lists
 - Validate user pointers before dereferencing
+- Roll back both physical frames and virtual slots when dynamic mapping fails
 
 ---
 

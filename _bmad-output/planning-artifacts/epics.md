@@ -2,6 +2,7 @@
 stepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories', 'step-04-final-validation']
 status: 'complete'
 completedAt: '2026-01-12'
+lastUpdated: '2026-08-25'
 inputDocuments:
   - '_bmad-output/planning-artifacts/prd.md'
   - '_bmad-output/planning-artifacts/architecture.md'
@@ -153,6 +154,11 @@ This document provides the complete epic and story breakdown for os-dev, decompo
    - Physical Memory Manager: Bitmap allocator (1 bit per 4KB page frame)
    - Kernel Heap: Simple linked-list allocator with first-fit
    - Interface: `pmm_alloc_frame()`, `pmm_free_frame()`, `kmalloc()`, `kfree()`
+   - Kernel virtual layout: explicit owned regions for low direct map,
+     kernel heap, dynamic mappings, kernel stacks, and recursive page-table
+     access
+   - Direct-map conversions are bounded to the documented low physical map;
+     they are not valid for arbitrary PMM frames
 
 4. **Filesystem Architecture**:
    - Custom minimal FS with on-disk layout: Superblock → Bitmaps → Inode table → Data blocks
@@ -285,7 +291,7 @@ Keyboard input works, timer fires for preemptive scheduling foundation, serial d
 ### Epic 3: Memory Management
 **User Value:** "I understand physical memory allocation and virtual memory — the MMU is no longer magic."
 
-Physical frame allocator (bitmap) works, paging enabled with higher-half kernel, page faults handled with diagnostic output, kernel heap (kmalloc/kfree) available.
+Physical frame allocator (bitmap) works, paging enabled with higher-half kernel, page faults handled with diagnostic output, kernel heap (kmalloc/kfree) available, and kernel virtual memory regions are explicitly owned so heap, direct-map, page-table, and thread-stack mappings cannot collide.
 
 **FRs covered:** FR7, FR9-14
 
@@ -685,7 +691,7 @@ So that I can interact with my OS and build toward a shell.
 
 ## Epic 3: Memory Management
 
-**Goal:** Physical frame allocator (bitmap) works, paging enabled with higher-half kernel, page faults handled with diagnostic output, kernel heap (kmalloc/kfree) available.
+**Goal:** Physical frame allocator (bitmap) works, paging enabled with higher-half kernel, page faults handled with diagnostic output, kernel heap (kmalloc/kfree) available, and kernel virtual memory regions are explicitly owned before process/thread work begins.
 
 ### Story 3.1: Physical Memory Manager
 
@@ -764,6 +770,10 @@ So that I understand virtual memory and have address space isolation foundation.
 **Then** page directory entries point to page tables
 **And** KERNEL_BASE is defined as 0xC0000000
 **And** P2V/V2P macros convert between physical and virtual
+
+_Correction note (2026-08-25): Story 3.5 supersedes the general conversion
+and implicit-update assumptions above with bounded direct-map helpers and
+non-overwriting map semantics._
 
 **Given** kernel/mm/page.c source
 **When** I examine the code
@@ -856,15 +866,102 @@ So that I can allocate variable-sized objects without manual frame management.
 
 ---
 
+### Story 3.5: Kernel Virtual Address Space Layout & Dynamic Mapping Regions
+
+As a developer,
+I want kernel virtual memory divided into explicit owned regions,
+So that heap, direct-map, page-table, and kernel-stack mappings cannot
+silently collide as the kernel grows.
+
+**Acceptance Criteria:**
+
+**Given** paging is enabled
+**When** I inspect the kernel virtual memory constants
+**Then** the following regions are named and documented:
+user space `0x00000000-0xBFFFFFFF`, low physical direct map
+`0xC0000000-0xC0FFFFFF`, kernel heap starting at `0xC1000000`,
+kernel heap ending at `0xDFFFFFFF`, dynamic kernel mappings
+`0xE0000000-0xEFFFFFFF`, reserved kernel expansion space
+`0xF0000000-0xFEFFFFFF`, kernel stack slots `0xFF000000-0xFFBFFFFF`,
+and recursive page tables `0xFFC00000-0xFFFFFFFF`
+**And** region boundaries are page-aligned and non-overlapping
+**And** each region has a clear owner and allowed allocator
+
+**Given** direct-map helpers are used
+**When** converting physical and virtual addresses
+**Then** conversions are documented and guarded as valid only for the
+bounded low physical direct map
+**And** code does not use direct-map conversion for arbitrary PMM frames
+that may live above the mapped physical window
+
+**Given** a virtual page is already present
+**When** the normal page-map operation targets that address
+**Then** it returns an error without changing the existing mapping
+**And** intentional replacement, if needed, uses a distinct explicit operation
+
+**Given** the kernel heap is initialized
+**When** heap pages are allocated or expanded
+**Then** heap virtual addresses come only from the heap-owned range
+**And** heap growth fails cleanly or panics during required boot setup
+before crossing its upper bound
+**And** the linker/build path makes it obvious if the kernel image would
+overlap the heap start
+
+**Given** recursive page-directory mapping is initialized
+**When** page tables are created, inspected, mapped, or unmapped
+**Then** page-table memory is accessed through the recursive window
+**And** the page directory is visible at `0xFFFFF000`
+**And** new page-table frames can be zeroed and updated even when their
+physical addresses are outside the low direct-map window
+
+**Given** kernel stack slots are initialized
+**When** a new kernel stack is allocated
+**Then** the allocator reserves a dedicated virtual slot
+**And** the lower guard page remains unmapped
+**And** the mapped stack page uses a PMM frame and returns an initial ESP
+at the top of the mapped page
+**And** freeing the stack unmaps the stack page, releases the PMM frame,
+and returns the virtual slot to the stack allocator
+**And** stack-region exhaustion fails without entering an adjacent region
+
+**Given** the initial kernel thread is represented
+**When** PID 0 is created
+**Then** its stack is documented as the inherited bootloader stack at
+physical `0x90000`, virtual `0xC0090000`
+**And** PID 0's bootstrap stack is not freed through the normal kernel
+stack allocator
+**And** a later explicit migration may move PID 0 to a normal stack slot
+
+**Given** the implementation is tested
+**When** in-kernel and host-side tests run
+**Then** tests cover region overlap, heap bounds, stack slot allocation and
+free, guard-page non-presence, direct-map conversion bounds, recursive
+page-table virtual addresses, and rollback on allocation/mapping failure
+**And** failures leave existing mappings unchanged and leak no PMM frame or
+virtual slot
+
+**Dependency:** Story 3.5 must be implemented and reviewed before Story 4.1
+resumes. Future per-process address spaces preserve the recursive PDE and the
+shared kernel-region contracts.
+
+---
+
 ## Epic 4: Kernel Threads & Scheduling
 
-**Goal:** Multiple kernel threads run concurrently with round-robin scheduling. task_struct maintains process state. Context switches preserve all register state correctly.
+**Goal:** After Story 3.5 provides safe kernel-stack virtual allocation,
+multiple kernel threads run concurrently with round-robin scheduling.
+`task_struct` maintains process state, and context switches preserve all
+register state correctly.
 
 ### Story 4.1: Task Structure & Thread Creation
 
 As a developer,
 I want a task_struct and the ability to create kernel threads,
 So that I can represent multiple execution contexts and understand process state.
+
+**Dependency:** Story 3.5 must be complete before implementation starts.
+Kernel thread stacks must come from the dedicated kernel-stack virtual
+region, not from `P2V(pmm_alloc_frame())` or from the heap.
 
 **Acceptance Criteria:**
 
@@ -884,7 +981,8 @@ So that I can represent multiple execution contexts and understand process state
 **When** thread_create(entry_function) is called
 **Then** new task_struct is allocated via kmalloc
 **And** unique PID is assigned (sequential)
-**And** 4KB kernel stack is allocated
+**And** 4KB kernel stack is allocated from the dedicated kernel-stack virtual region
+**And** the stack has a guard page
 **And** stack is initialized with entry point and initial register state
 **And** task state is set to READY
 
@@ -896,7 +994,7 @@ So that I can represent multiple execution contexts and understand process state
 **Given** multiple threads are created
 **When** I examine the task list
 **Then** each has unique PID
-**And** each has separate kernel stack
+**And** each has a separate kernel stack virtual slot
 
 ---
 
@@ -1860,4 +1958,3 @@ So that I can create and modify files.
 **Then** file contains the text I entered
 **And** end-to-end file creation via editor works
 **And** OS is complete and usable
-

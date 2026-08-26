@@ -2,6 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 status: 'complete'
 completedAt: '2026-01-12'
+lastUpdated: '2026-08-25'
 inputDocuments:
   - '_bmad-output/planning-artifacts/prd.md'
   - '_bmad-output/planning-artifacts/product-brief-os-dev-2026-01-11.md'
@@ -246,6 +247,7 @@ debug: all
 |----------|----------|-----------|
 | Kernel Heap | Simple linked list allocator | Fully understandable, upgradeable interface |
 | Physical Memory | Bitmap allocator | Simple to debug, visualize, matches PRD |
+| Kernel Virtual Layout | Explicit kernel-space regions | Prevents heap, direct-map, page-table, and kernel-stack collisions |
 | Custom Filesystem | Superblock → bitmaps → inode table → data | Mirrors early Unix/ext2 concepts |
 | Error Handling | Linux-style negative errno | Aligns with learning goal, compact |
 | Logging | printk with 4 levels (ERROR/WARN/INFO/DEBUG) | Visibility without flooding |
@@ -264,6 +266,69 @@ debug: all
 - Interface: `pmm_alloc_frame()` / `pmm_free_frame(addr)`
 - Location: `kernel/mm/pmm.c`
 - Debug: Bitmap can be dumped to visualize allocation state
+
+**Kernel Virtual Address Layout:**
+- User space remains `0x00000000-0xBFFFFFFF`.
+- Kernel space starts at `0xC0000000`, but it is divided into owned
+  regions rather than treated as one flat direct map.
+- The low physical direct map is bounded to
+  `0xC0000000-0xC0FFFFFF` for physical `0x00000000-0x00FFFFFF`.
+  Address conversion helpers for this window are valid only for that
+  window; they must not be used blindly on arbitrary PMM frames.
+- Kernel image and boot-reserved objects live inside the direct-map
+  window. The kernel image must remain below the heap start, and the
+  build/link path must make that boundary obvious.
+- Kernel heap has an explicit virtual range beginning at `0xC1000000`.
+  It grows by mapping PMM frames into heap-owned virtual pages and must
+  stop before the next owned kernel virtual region.
+- Dynamic kernel mappings, such as future device mappings or temporary
+  mappings, use a separately documented range after the heap.
+- Kernel thread stacks are allocated from a dedicated virtual stack
+  region, not from the low direct map and not from the heap. Each stack
+  slot reserves at least one unmapped guard page below the mapped stack
+  page so downward stack overflow faults instead of corrupting another
+  allocation.
+- The initial PID 0 stack is the bootstrap stack inherited from the
+  bootloader at physical `0x90000`, reached after paging as
+  `0xC0090000`. It is reserved boot memory, not a heap allocation and
+  not a normal per-thread stack slot unless a later story explicitly
+  migrates PID 0.
+- Recursive page-directory mapping reserves
+  `0xFFC00000-0xFFFFFFFF`, with PDE 1023 pointing back to the current
+  page directory. Page-table pages should be accessed through this
+  recursive window instead of assuming their physical frames are inside
+  the direct map.
+- Region boundaries are page-aligned constants in one VMM-owned header.
+  Subsystems request addresses from the owner of a region; they do not derive
+  virtual allocation addresses from physical frame numbers.
+- The ordinary map operation fails if the destination page is already
+  present. Intentional replacement requires a separate, explicit remap
+  operation so an ownership error cannot silently overwrite live memory.
+- Dynamic mapping is transactional: failure unwinds every mapping, physical
+  frame, and virtual slot acquired by the operation.
+
+Planned i386 kernel-space map:
+
+| Virtual Range | Owner | Notes |
+|---------------|-------|-------|
+| `0x00000000-0xBFFFFFFF` | User space | Future per-process mappings |
+| `0xC0000000-0xC0FFFFFF` | Low physical direct map | Physical `0-16 MiB`; includes boot stack, VGA, early page tables, and kernel image |
+| `0xC1000000-0xDFFFFFFF` | Kernel heap | Bounded upward-growing `kmalloc` arena |
+| `0xE0000000-0xEFFFFFFF` | Dynamic kernel mappings | Future device/temporary/vmalloc-style mappings |
+| `0xF0000000-0xFEFFFFFF` | Reserved kernel space | Expansion space for later architecture work |
+| `0xFF000000-0xFFBFFFFF` | Kernel stack slots | Guard page plus mapped stack page per kernel thread |
+| `0xFFC00000-0xFFFFFFFF` | Recursive page tables | PDE 1023 self-map, page directory visible at `0xFFFFF000` |
+
+The 16 MiB direct map is an early-kernel policy, not a physical-memory limit.
+PMM may return frames elsewhere in supported RAM. Those frames become
+accessible only after an owned virtual region maps them; newly allocated page
+tables are reached through the recursive window.
+
+The linker/build must reject a kernel image that extends beyond the direct-map
+window. Heap growth must stop at `KERNEL_HEAP_END`, and stack allocation must
+report exhaustion before entering the recursive window. The recursive PDE is
+supervisor-only and is installed in every future address space that shares the
+kernel mappings.
 
 ### Filesystem Architecture
 
@@ -783,4 +848,3 @@ This architecture document is your complete guide for implementing os-dev. Follo
 **Architecture Status:** READY FOR IMPLEMENTATION
 
 **Next Phase:** Begin implementation using the architectural decisions and patterns documented herein.
-
