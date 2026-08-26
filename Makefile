@@ -20,6 +20,7 @@
 
 ROOT := $(CURDIR)
 BUILD := $(ROOT)/build
+QEMU_FLAGS ?=
 
 include $(ROOT)/config.mk
 
@@ -230,7 +231,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN)
 # -drive: Use raw disk image
 # -serial stdio: Output serial to terminal (for future printk)
 qemu: image
-	qemu-system-i386 -drive file=$(DISK_IMG),format=raw -serial stdio
+	qemu-system-i386 -drive file=$(DISK_IMG),format=raw -serial stdio $(QEMU_FLAGS)
 
 # Run in QEMU with GDB stub for debugging
 # -s: Enable GDB server on port 1234

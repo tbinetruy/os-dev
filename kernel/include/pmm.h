@@ -120,4 +120,8 @@ uint32_t pmm_get_free_count(void);
  */
 uint32_t pmm_get_total_count(void);
 
+#ifdef TEST_MODE
+int pmm_test_force_next_frame(uint32_t phys_addr);
+#endif
+
 #endif /* KERNEL_INCLUDE_PMM_H */

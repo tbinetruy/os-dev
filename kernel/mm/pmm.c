@@ -56,6 +56,23 @@ static uint8_t frame_bitmap[BITMAP_SIZE];
 static uint32_t total_frame_count;  /* Total frames in system */
 static uint32_t free_frame_count;   /* Currently free frames */
 
+#ifdef TEST_MODE
+static uint32_t forced_test_frame;
+
+int pmm_test_force_next_frame(uint32_t phys_addr)
+{
+    uint32_t frame = PHYS_TO_FRAME(phys_addr);
+
+    if ((phys_addr & (PAGE_SIZE - 1)) != 0 ||
+        phys_addr < DIRECT_MAP_PHYS_LIMIT || frame >= total_frame_count ||
+        bitmap_test(frame_bitmap, frame)) {
+        return -1;
+    }
+    forced_test_frame = phys_addr;
+    return 0;
+}
+#endif
+
 /* Bitmap operations provided by kernel/lib/bitmap.c */
 
 /*
@@ -180,6 +197,16 @@ void pmm_init(void)
 uint32_t pmm_alloc_frame(void)
 {
     uint32_t f;
+
+#ifdef TEST_MODE
+    if (forced_test_frame != 0) {
+        f = PHYS_TO_FRAME(forced_test_frame);
+        bitmap_set(frame_bitmap, f);
+        free_frame_count--;
+        forced_test_frame = 0;
+        return FRAME_TO_PHYS(f);
+    }
+#endif
 
     /* Start search after 1MB to skip reserved memory */
     for (f = FIRST_ALLOC_FRAME; f < total_frame_count; f++) {

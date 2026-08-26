@@ -63,6 +63,10 @@ void test_vmm(void)
         return;
     }
 
+    /* Force the new dynamic-region page table above the direct-map limit. */
+    TEST_ASSERT_MSG(pmm_test_force_next_frame(0x01000000) == 0,
+                    "real free high frame reserved for page table");
+
     /*
      * Test 4: Map a page in an unused virtual address region
      *
@@ -72,6 +76,10 @@ void test_vmm(void)
     uint32_t test_virt = KERNEL_DYNAMIC_START;
     int ret = vmm_map_page(test_virt, test_phys, PAGE_PRESENT | PAGE_WRITABLE);
     TEST_ASSERT_MSG(ret == 0, "vmm_map_page should succeed");
+    TEST_ASSERT_MSG((((uint32_t *)RECURSIVE_PD_VADDR)
+                     [PDE_INDEX(test_virt)] & PAGE_FRAME_MASK) >=
+                    DIRECT_MAP_PHYS_LIMIT,
+                    "page table frame is above direct-map limit");
     TEST_ASSERT_MSG(vmm_map_page(test_virt, test_phys + PAGE_SIZE,
                                  PAGE_KERNEL) == -EEXIST,
                     "occupied mapping is preserved");
