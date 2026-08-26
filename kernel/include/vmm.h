@@ -1,14 +1,9 @@
 /*
- * vmm.h - Virtual Memory Manager
+ * vmm.h - Virtual memory layout and mapping interface
  *
- * Manages virtual address space using x86 paging. Features:
- *   - Higher-half kernel at 0xC0000000
- *   - Two-level page tables (Page Directory + Page Tables)
- *   - P2V/V2P macros for physical-virtual address conversion
- *
- * After vmm_init(), all kernel code runs at virtual addresses
- * >= KERNEL_BASE. Physical addresses must be converted using
- * P2V() before dereferencing.
+ * Kernel virtual space is partitioned into explicit, half-open ownership
+ * regions. The recursive region ends at 4 GiB, so its representable bound is
+ * expressed by RECURSIVE_LAST rather than a wrapping 32-bit exclusive end.
  */
 
 #ifndef KERNEL_INCLUDE_VMM_H
@@ -16,163 +11,71 @@
 
 #include <types.h>
 
-/*
- * =============================================================================
- * Kernel Virtual Address Space
- * =============================================================================
- *
- * Memory layout after paging enabled:
- *
- *   0xFFFFFFFF ┌──────────────────┐
- *              │   Kernel Heap    │  (grows down, future)
- *              ├──────────────────┤
- *              │  Kernel Stack    │
- *              ├──────────────────┤
- *              │   Kernel BSS     │
- *              ├──────────────────┤
- *              │   Kernel Data    │
- *              ├──────────────────┤
- *              │   Kernel Code    │
- *   0xC0100000 ├──────────────────┤
- *              │   Reserved       │  (first 1MB virtual)
- *   0xC0000000 ├──────────────────┤  KERNEL_BASE
- *              │                  │
- *              │   User Space     │  (future - Epic 5+)
- *              │   (unmapped)     │
- *              │                  │
- *   0x00000000 └──────────────────┘
- */
-
-/*
- * KERNEL_BASE - Virtual address where kernel is mapped
- *
- * The kernel occupies the upper 1GB of virtual address space.
- * User processes get the lower 3GB (0x00000000 - 0xBFFFFFFF).
- */
-#define KERNEL_BASE         0xC0000000
-
-/*
- * KERNEL_PAGE_DIR_IDX - Page directory index for KERNEL_BASE
- *
- * PDE index = virtual address bits 22-31
- * KERNEL_BASE (0xC0000000) >> 22 = 768
- */
-#define KERNEL_PAGE_DIR_IDX 768
-
-/*
- * =============================================================================
- * Address Conversion Macros
- * =============================================================================
- *
- * After paging is enabled, physical addresses cannot be accessed directly.
- * Use P2V() to convert physical to virtual, V2P() for the reverse.
- *
- * IMPORTANT: These only work for addresses in the kernel's direct-mapped
- * region (physical 0x00000000 maps to virtual 0xC0000000).
- */
-
-/*
- * P2V - Convert physical address to virtual address
- *
- * @phys: Physical address
- *
- * Returns: Corresponding virtual address in kernel space
- */
-#define P2V(phys)   ((uint32_t)(phys) + KERNEL_BASE)
-
-/*
- * V2P - Convert virtual address to physical address
- *
- * @virt: Virtual address (must be >= KERNEL_BASE)
- *
- * Returns: Corresponding physical address
- */
-#define V2P(virt)   ((uint32_t)(virt) - KERNEL_BASE)
-
-/*
- * =============================================================================
- * Page Constants
- * =============================================================================
- *
- * Note: PAGE_SIZE and PAGE_SHIFT are also defined in pmm.h.
- * We use #ifndef guards to avoid redefinition errors.
- */
-
 #ifndef PAGE_SIZE
-#define PAGE_SIZE       4096            /* 4KB per page */
+#define PAGE_SIZE 4096U
 #endif
-
 #ifndef PAGE_SHIFT
-#define PAGE_SHIFT      12              /* log2(PAGE_SIZE) */
+#define PAGE_SHIFT 12U
 #endif
-
-/*
- * PAGE_MASK - Mask to extract page-aligned address
- *
- * Clears the low 12 bits (offset within page).
- * Note: Also defined in pmm.h - use guards to avoid redefinition.
- */
 #ifndef PAGE_MASK
-#define PAGE_MASK       (~(PAGE_SIZE - 1))
+#define PAGE_MASK (~(PAGE_SIZE - 1U))
 #endif
 
-/*
- * =============================================================================
- * VMM Functions
- * =============================================================================
- */
+/* Canonical region ownership, in ascending virtual-address order. */
+#define USER_SPACE_START              0x00000000U
+#define USER_SPACE_END_EXCLUSIVE      0xC0000000U
+#define USER_SPACE_LAST               0xBFFFFFFFU
+#define DIRECT_MAP_START              0xC0000000U
+#define DIRECT_MAP_END_EXCLUSIVE      0xC1000000U
+#define DIRECT_MAP_LAST               0xC0FFFFFFU
+#define DIRECT_MAP_PHYS_LIMIT         0x01000000U
+#define KERNEL_HEAP_START             0xC1000000U
+#define KERNEL_HEAP_END_EXCLUSIVE     0xE0000000U
+#define KERNEL_HEAP_LAST              0xDFFFFFFFU
+#define KERNEL_DYNAMIC_START          0xE0000000U
+#define KERNEL_DYNAMIC_END_EXCLUSIVE  0xF0000000U
+#define KERNEL_DYNAMIC_LAST           0xEFFFFFFFU
+#define KERNEL_RESERVED_START         0xF0000000U
+#define KERNEL_RESERVED_END_EXCLUSIVE 0xFF000000U
+#define KERNEL_RESERVED_LAST          0xFEFFFFFFU
+#define KERNEL_STACK_START            0xFF000000U
+#define KERNEL_STACK_END_EXCLUSIVE    0xFFC00000U
+#define KERNEL_STACK_LAST             0xFFBFFFFFU
+#define RECURSIVE_START               0xFFC00000U
+#define RECURSIVE_LAST                0xFFFFFFFFU
 
-/*
- * vmm_init - Initialize the virtual memory manager
- *
- * Called after pmm_init(). At this point, paging has already been enabled
- * by entry.S, and the kernel is running at higher-half addresses.
- *
- * This function:
- *   1. Verifies paging is enabled (CR0.PG = 1)
- *   2. Stores reference to kernel page directory
- *   3. Initializes VMM state
- */
+#define KERNEL_BASE                   DIRECT_MAP_START
+#define KERNEL_PAGE_DIR_IDX           768U
+#define DIRECT_MAP_FIRST_PDE          768U
+#define DIRECT_MAP_LAST_PDE           771U
+#define KERNEL_HEAP_FIRST_PDE         772U
+#define KERNEL_HEAP_LAST_PDE          895U
+#define KERNEL_DYNAMIC_FIRST_PDE      896U
+#define KERNEL_DYNAMIC_LAST_PDE       959U
+#define KERNEL_RESERVED_FIRST_PDE     960U
+#define KERNEL_RESERVED_LAST_PDE      1019U
+#define KERNEL_STACK_FIRST_PDE        1020U
+#define KERNEL_STACK_LAST_PDE         1022U
+#define RECURSIVE_PDE_INDEX           1023U
+
+#define RECURSIVE_PD_VADDR            0xFFFFF000U
+#define VMM_PAGE_TABLE_VADDR(index) \
+    (RECURSIVE_START + ((uint32_t)(index) * PAGE_SIZE))
+
+#define KSTACK_GUARD_PAGES            1U
+#define KSTACK_PAGES                  1U
+#define KSTACK_SLOT_PAGES             (KSTACK_GUARD_PAGES + KSTACK_PAGES)
+#define KSTACK_SLOT_SIZE              (KSTACK_SLOT_PAGES * PAGE_SIZE)
+#define KSTACK_SLOT_COUNT \
+    ((KERNEL_STACK_END_EXCLUSIVE - KERNEL_STACK_START) / KSTACK_SLOT_SIZE)
+
+/* Checked conversions apply only to the fixed low-physical direct map. */
+int vmm_direct_phys_to_virt(uint32_t phys, uint32_t *virt_out);
+int vmm_direct_virt_to_phys(uint32_t virt, uint32_t *phys_out);
+
 void vmm_init(void);
-
-/*
- * vmm_map_page - Map a virtual address to a physical address
- *
- * Creates or updates the page table entry for the given virtual address.
- * Allocates a new page table from PMM if necessary.
- *
- * @virt:  Virtual address to map (will be page-aligned)
- * @phys:  Physical address to map to (will be page-aligned)
- * @flags: Page flags (PAGE_PRESENT, PAGE_WRITABLE, PAGE_USER)
- *
- * Returns: 0 on success, -ENOMEM if page table allocation fails
- */
 int vmm_map_page(uint32_t virt, uint32_t phys, uint32_t flags);
-
-/*
- * vmm_unmap_page - Unmap a virtual address
- *
- * Clears the page table entry and invalidates the TLB.
- * Does NOT free the physical frame - caller's responsibility.
- *
- * @virt: Virtual address to unmap (will be page-aligned)
- */
-void vmm_unmap_page(uint32_t virt);
-
-/*
- * vmm_get_physaddr - Get physical address for a virtual address
- *
- * Walks the page tables to find the physical address mapped
- * to the given virtual address.
- *
- * @virt: Virtual address to translate
- *
- * Returns: Physical address, or 0 if not mapped
- *
- * Note: Physical address 0x00000000 is indistinguishable from
- * "not mapped". This is acceptable because the PMM reserves the
- * first 1MB and never allocates frame 0.
- */
+int vmm_unmap_page(uint32_t virt);
 uint32_t vmm_get_physaddr(uint32_t virt);
 
 #endif /* KERNEL_INCLUDE_VMM_H */
